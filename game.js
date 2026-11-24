@@ -28,6 +28,11 @@ function hideStatus() {
     document.getElementById('statusBanner').style.display = 'none';
 }
 
+function hideBlockCdOverlay() {
+    const el = document.getElementById('blockCdOverlay');
+    if (el) el.style.display = 'none';
+}
+
 // Test arena state
 const testState = {
     ability: gameData.equippedAbility,
@@ -970,7 +975,6 @@ zone.addEventListener('touchstart', (e) => {
 camZone.addEventListener('touchstart', (e) => {
     for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
-        // Left 42% of screen always controls floating joystick, never hijacks camera
         if (t.clientX < window.innerWidth * 0.42 && t.clientY > 46) {
             if (joyTouchId === null) {
                 e.preventDefault();
@@ -1048,7 +1052,43 @@ function addAccessoryToHead(headMesh, accType) {
 }
 
 // ==========================================
-// ENTITIES
+// TARGET HELPER FOR AIMED ABILITIES (SWAP, SCOPOPHOBIA)
+// ==========================================
+const _helperAim = new THREE.Vector3();
+const _helperTo = new THREE.Vector3();
+
+function findAimedEnemy(caster, maxDist = 140, minDot = -0.15) {
+    const others = players.filter(p => p.isAlive && p !== caster && !p.isInvis);
+    if (others.length === 0) return null;
+
+    if (caster === mainPlayer) {
+        camera.getWorldDirection(_helperAim);
+        _helperAim.y = 0;
+        if (_helperAim.lengthSq() < 0.0001) {
+            _helperAim.set(Math.sin(caster.mesh.rotation.y), 0, Math.cos(caster.mesh.rotation.y));
+        }
+        _helperAim.normalize();
+    } else {
+        _helperAim.set(Math.sin(caster.mesh.rotation.y), 0, Math.cos(caster.mesh.rotation.y)).normalize();
+    }
+
+    let best = null;
+    let bestScore = -999;
+    others.forEach(c => {
+        _helperTo.subVectors(c.mesh.position, caster.mesh.position);
+        _helperTo.y = 0;
+        const dist = Math.max(0.1, _helperTo.length());
+        if (dist > maxDist) return;
+        const dot = _helperAim.dot(_helperTo.divideScalar(dist));
+        if (dot < minDot) return;
+        const score = dot * 2.2 + (28 / (dist + 12));
+        if (score > bestScore) { bestScore = score; best = c; }
+    });
+    return best;
+}
+
+// ==========================================
+// ENTITIES (ALL 25 ABILITIES)
 // ==========================================
 const players = [];
 let mainPlayer = null;
@@ -1091,6 +1131,10 @@ class Entity {
         this.windTimer = 0;
         this.forcefieldTimer = 0; this.forcefieldMax = 420;
         this.stunTimer = 0;
+        this.virusTimer = 0;
+        this.scopoTimer = 0;
+        this.scopoWeakHit = false;
+        this.martyrSlowTimer = 0;
         this.rapturePoseTimer = 0;
         this.blinkCharges = 3;
         this.reaperStacks = 0;
@@ -1163,6 +1207,25 @@ class Entity {
         this.windAuraGroup.visible = false;
         this.mesh.add(this.windAuraGroup);
 
+        // Virus green toxic ring
+        this.virusAura = new THREE.Mesh(
+            new THREE.TorusGeometry(3.4, 0.24, 8, 22),
+            new THREE.MeshBasicMaterial({ color: 0x22ff44, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending })
+        );
+        this.virusAura.rotation.x = Math.PI / 2;
+        this.virusAura.position.y = -1.2;
+        this.virusAura.visible = false;
+        this.mesh.add(this.virusAura);
+
+        // Scopophobia crimson eye-mark ring
+        this.scopoAura = new THREE.Mesh(
+            new THREE.RingGeometry(2.4, 3.6, 18),
+            new THREE.MeshBasicMaterial({ color: 0xff0044, side: THREE.DoubleSide, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+        );
+        this.scopoAura.position.y = 6.2;
+        this.scopoAura.visible = false;
+        this.mesh.add(this.scopoAura);
+
         this.stunRing = new THREE.Mesh(
             new THREE.TorusGeometry(2.2, 0.22, 8, 20),
             new THREE.MeshBasicMaterial({ color: 0xffcc00, blending: THREE.AdditiveBlending })
@@ -1212,6 +1275,9 @@ class Entity {
         if (this.getCurrentAbility() === 'reaper' && this.reaperStacks > 0) {
             spd *= (1 + this.reaperStacks * 0.11);
         }
+        if (this.virusTimer > 0) spd *= 0.65;
+        if (this.scopoTimer > 0) spd *= 0.55;
+        if (this.martyrSlowTimer > 0) spd *= 0.6;
         return spd;
     }
 
@@ -1271,6 +1337,28 @@ class Entity {
         } else {
             this.stunRing.visible = false;
         }
+
+        if (this.virusTimer > 0) {
+            this.virusTimer--;
+            this.virusAura.visible = true;
+            this.virusAura.rotation.z += 0.12;
+            this.virusAura.position.y = -1.2 + Math.sin(performance.now() * 0.01) * 1.4;
+        } else {
+            this.virusAura.visible = false;
+        }
+
+        if (this.scopoTimer > 0) {
+            this.scopoTimer--;
+            this.scopoAura.visible = true;
+            this.scopoAura.lookAt(camera.position);
+            const s = 1 + Math.sin(performance.now() * 0.02) * 0.18;
+            this.scopoAura.scale.setScalar(s);
+        } else {
+            this.scopoAura.visible = false;
+            this.scopoWeakHit = false;
+        }
+
+        if (this.martyrSlowTimer > 0) this.martyrSlowTimer--;
 
         if (this.targetRing.visible) {
             const pulse = 1.0 + Math.sin(performance.now() * 0.015) * 0.14;
@@ -1455,11 +1543,117 @@ class Entity {
             spawnShockwave(startPos, 0xff5522, 2, 14, 0.06, true);
             if (!this.isBot) playSynth(300, 640, 0.28, 'sine', 0.3);
             this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'swap') {
+            const enemy = findAimedEnemy(this, 160, -0.2);
+            if (!enemy) {
+                if (!this.isBot) showStatus('НЕТ ЦЕЛИ В ПРИЦЕЛЕ', '#ffaa00', 1000);
+                return false;
+            }
+            const myPos = this.mesh.position.clone();
+            const enPos = enemy.mesh.position.clone();
+            spawnLightning(myPos, enPos, 0x00eeff, 5);
+            spawnLightning(myPos, enPos, 0xffcc00, 2);
+            spawnShockwave(myPos, 0x00eeff, 2, 14, 0.06, true);
+            spawnShockwave(enPos, 0xffcc00, 2, 14, 0.06, true);
+            spawnSparks(myPos, 0x00eeff, 12, 1.0);
+            spawnSparks(enPos, 0xffcc00, 12, 1.0);
+            this.mesh.position.set(enPos.x, this.baseY, enPos.z);
+            enemy.mesh.position.set(myPos.x, enemy.baseY, myPos.z);
+            this.clampBounds();
+            enemy.clampBounds();
+            if (!this.isBot || enemy === mainPlayer) {
+                playSynth(380, 980, 0.22, 'triangle', 0.3);
+                addShake(0.6);
+                if (enemy === mainPlayer) showStatus('ВАС ПОМЕНЯЛИ МЕСТАМИ (SWAP)', '#00eeff', 1300);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'scopophobia') {
+            const enemy = findAimedEnemy(this, 150, 0.1);
+            if (!enemy) {
+                if (!this.isBot) showStatus('СМОТРИТЕ НА ВРАГА', '#ff2255', 1000);
+                return false;
+            }
+            enemy.scopoTimer = 240;
+            enemy.scopoWeakHit = true;
+            spawnLightning(startPos, enemy.mesh.position.clone(), 0xff0044, 3);
+            spawnShockwave(enemy.mesh.position.clone(), 0xff0044, 2, 15, 0.05, true);
+            spawnSparks(enemy.mesh.position.clone(), 0xff1155, 14, 0.9);
+            if (!this.isBot) {
+                playSynth(190, 85, 0.32, 'sawtooth', 0.3);
+                showStatus(`SCOPOPHOBIA: ${enemy.name} ЗАМЕДЛЕН`, '#ff2255', 1400);
+            } else if (enemy === mainPlayer) {
+                playSynth(180, 75, 0.32, 'sawtooth', 0.3);
+                showStatus('SCOPOPHOBIA: ВЫ ЗАМЕДЛЕНЫ (4с)', '#ff2255', 1600);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'pull') {
+            if (!ball.mesh.visible || ball.teleTimer > 0) return false;
+            if (ball.target === this) {
+                if (!this.isBot) showStatus('МЯЧ УЖЕ ЛЕТИТ В ВАС', '#ff4466', 1000);
+                return false;
+            }
+            ball.unfreeze();
+            spawnLightning(startPos, ball.mesh.position.clone(), 0xff2244, 4);
+            spawnShockwave(ball.mesh.position.clone(), 0xff2244, 2, 14, 0.06, true);
+            spawnShockwave(startPos, 0xff2244, 2, 12, 0.06, true);
+            ball.forceTarget(this, ball.lastHitBy);
+            ball.speed = Math.min(ball.speed + 0.2, 9.2);
+            if (!this.isBot) {
+                playSynth(620, 240, 0.24, 'sawtooth', 0.3);
+                addShake(0.45);
+                showStatus('PULL: МЯЧ ПЕРЕХВАЧЕН НА ВАС', '#ff3355', 1200);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'ninja_dash') {
+            if (!ball.mesh.visible || ball.teleTimer > 0 || ball.selfBounceGrace > 0) return false;
+            const bPos = ball.mesh.position.clone();
+            const toBall = new THREE.Vector3().subVectors(bPos, startPos);
+            const dist = toBall.length();
+            if (dist > 130) {
+                if (!this.isBot) showStatus('МЯЧ СЛИШКОМ ДАЛЕКО', '#ff4466', 1000);
+                return false;
+            }
+            const mid1 = new THREE.Vector3().lerpVectors(startPos, bPos, 0.33);
+            const mid2 = new THREE.Vector3().lerpVectors(startPos, bPos, 0.66);
+            spawnAfterimage(startPos, 0xcc1133);
+            spawnAfterimage(mid1, 0xff2244);
+            spawnAfterimage(mid2, 0xff4455);
+
+            const dirFlat = toBall.clone(); dirFlat.y = 0;
+            if (dirFlat.lengthSq() > 0.001) dirFlat.normalize();
+            const landPos = bPos.clone().sub(dirFlat.clone().multiplyScalar(5.5));
+            this.mesh.position.set(landPos.x, this.baseY, landPos.z);
+            this.clampBounds();
+            if (dirFlat.lengthSq() > 0.001) this.mesh.rotation.y = Math.atan2(dirFlat.x, dirFlat.z);
+
+            this.rapturePoseTimer = 14;
+            this.blockCooldown = 0;
+            this.parryActiveTimer = 0;
+            ball.unfreeze();
+            ball.aeroTimer = 0;
+            ball.raptureBoost = false;
+            ball.martyrBall = false;
+            playClashSound(ball.speed + 1.2);
+            playSynth(880, 260, 0.2, 'sawtooth', 0.3);
+            spawnSlashArc(this, 0xff1144, 1.45);
+            this.triggerParryImpactVFX(bPos, 0xff1144);
+            if (!this.isBot) { targetFov = 73; addShake(0.9); }
+
+            ball.speed = Math.min(ball.speed + 0.45, 9.4);
+            ball.pickNewTarget(this);
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'telekinesis') {
+            if (!ball.mesh.visible || ball.teleTimer > 0) return false;
+            ball.startTelekinesis(this);
+            playSynth(300, 920, 0.35, 'sine', 0.32);
+            if (!this.isBot) showStatus('ТЕЛЕКИНЕЗ: НАВЕДИТЕ КАМЕРУ', '#cc44ff', 1700);
+            else showStatus(`${this.name}: ТЕЛЕКИНЕЗ`, '#cc44ff', 1500);
+            this.abilityReadyAt = Date.now() + cdMs;
         } else if (type === 'raging_deflect') {
             this.abilityReadyAt = Date.now() + cdMs;
             const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
             const range = 22 + (ball.speed * 3.2);
-            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0) {
+            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
                 this.rapturePoseTimer = 20;
                 playClashSound(ball.speed + 2.0);
                 playSynth(210, 75, 0.35, 'sawtooth', 0.4);
@@ -1472,11 +1666,28 @@ class Entity {
                 spawnSlashArc(this, 0xff3344, 1.1);
                 if (!this.isBot) playSynth(220, 140, 0.25, 'triangle', 0.22);
             }
+        } else if (type === 'aerodynamic_slash') {
+            this.abilityReadyAt = Date.now() + cdMs;
+            const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
+            const range = 22 + (ball.speed * 3.2);
+            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
+                this.rapturePoseTimer = 22;
+                playClashSound(ball.speed + 2.2);
+                playSynth(420, 1150, 0.36, 'sawtooth', 0.38);
+                spawnSlashArc(this, 0xff2255, 1.65);
+                addShake(1.5);
+                ball.triggerAeroSlash(this);
+                this.blockCooldown = 0; this.parryActiveTimer = 0;
+            } else {
+                this.rapturePoseTimer = 45;
+                spawnSlashArc(this, 0xff2255, 1.15);
+                if (!this.isBot) playSynth(240, 140, 0.25, 'triangle', 0.22);
+            }
         } else if (type === 'rapture') {
             this.abilityReadyAt = Date.now() + cdMs;
             const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
             const range = 22 + (ball.speed * 3.2);
-            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0) {
+            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
                 this.rapturePoseTimer = 24;
                 playClashSound(ball.speed + 2.5);
                 playSynth(180, 60, 0.38, 'sawtooth', 0.44);
@@ -1513,13 +1724,26 @@ class Entity {
         if (this === mainPlayer) addShake(Math.min(1.1, 0.28 + ball.speed * 0.1));
     }
 
+    applyStandardParryBoost() {
+        const reaperBonus = (this.getCurrentAbility() === 'reaper') ? this.reaperStacks * 0.16 : 0;
+        let delta = 0.32 + reaperBonus;
+        if (this.scopoWeakHit) {
+            delta = -0.25;
+            this.scopoWeakHit = false;
+            if (this === mainPlayer) showStatus('УДАР ОСЛАБЛЕН (SCOPOPHOBIA)', '#ff2255', 1100);
+        }
+        ball.speed = Math.max(0.85, Math.min(ball.speed + delta, 9.2));
+        ball.raptureBoost = false;
+        ball.aeroTimer = 0;
+        ball.martyrBall = false;
+    }
+
     updateParryLogic() {
-        if (this.forcefieldTimer > 0 && isCombatState() && ball.target === this && ball.selfBounceGrace <= 0) {
+        if (this.forcefieldTimer > 0 && isCombatState() && ball.target === this && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
             if (this.mesh.position.distanceTo(ball.mesh.position) < 14 + ball.speed * 1.5) {
                 playClashSound(ball.speed);
                 ball.unfreeze();
-                ball.speed = Math.min(ball.speed + 0.32, 8.8);
-                ball.raptureBoost = false;
+                this.applyStandardParryBoost();
                 this.triggerParryImpactVFX(ball.mesh.position.clone(), 0xff6622);
                 ball.pickNewTarget(this);
                 return;
@@ -1530,14 +1754,12 @@ class Entity {
             this.parryActiveTimer--;
             this.rArmGroup.rotation.x = -Math.PI / 1.5;
 
-            if (isCombatState() && ball.target === this && ball.selfBounceGrace <= 0) {
+            if (isCombatState() && ball.target === this && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
                 const parryRange = 15 + (ball.speed * 2.5);
                 if (this.mesh.position.distanceTo(ball.mesh.position) < parryRange) {
                     playClashSound(ball.speed);
                     ball.unfreeze();
-                    const reaperBonus = (this.getCurrentAbility() === 'reaper') ? this.reaperStacks * 0.16 : 0;
-                    ball.speed = Math.min(ball.speed + 0.32 + reaperBonus, 9.2);
-                    ball.raptureBoost = false;
+                    this.applyStandardParryBoost();
                     this.triggerParryImpactVFX(ball.mesh.position.clone(), getSwordAccentColor(this.swordId));
                     ball.pickNewTarget(this);
                     this.parryActiveTimer = 0; this.blockCooldown = 0;
@@ -1617,6 +1839,7 @@ class Entity {
             gameState = 'gameover';
             stopAllTouchControls();
             hideStatus();
+            hideBlockCdOverlay();
             ball.mesh.visible = false;
             ball.target = null;
             ballGroundRing.visible = false;
@@ -1633,6 +1856,7 @@ class Entity {
             gameState = 'gameover';
             stopAllTouchControls();
             hideStatus();
+            hideBlockCdOverlay();
             mainPlayer.setTargetHighlight(false);
             ball.mesh.visible = false;
             ball.target = null;
@@ -1693,7 +1917,7 @@ class Entity {
             }
             this.animateWalk(moving);
 
-            if (ball.target === this) {
+            if (ball.target === this && ball.teleTimer <= 0) {
                 if (mainPlayer && mainPlayer.isAlive && this.stunTimer <= 0) {
                     const toPlayer = new THREE.Vector3().subVectors(mainPlayer.mesh.position, this.mesh.position);
                     this.mesh.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
@@ -1746,14 +1970,18 @@ class Entity {
         if (Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
             if (ab === 'invis' && aliveCount === 2 && !this.isInvis && ball.target !== this && Math.random() < 0.025) {
                 this.activateAbility();
-            } else if (ab === 'freeze' && ball.frozenTimer <= 0 && ball.speed > 1.5 && Math.random() < 0.008) {
+            } else if ((ab === 'freeze' || ab === 'telekinesis') && ball.frozenTimer <= 0 && ball.teleTimer <= 0 && ball.speed > 1.5 && Math.random() < 0.006) {
                 this.activateAbility();
-            } else if ((ab === 'wind_cloak' || ab === 'shadow_step') && Math.random() < 0.005) {
+            } else if ((ab === 'wind_cloak' || ab === 'shadow_step' || ab === 'scopophobia' || ab === 'swap') && Math.random() < 0.004) {
+                this.activateAbility();
+            } else if (ab === 'pull' && ball.target !== this && ball.speed > 1.2 && Math.random() < 0.004) {
+                this.activateAbility();
+            } else if (ab === 'ninja_dash' && ball.target !== this && this.mesh.position.distanceTo(ball.mesh.position) < 60 && Math.random() < 0.007) {
                 this.activateAbility();
             }
         }
 
-        if (ball.target === this) {
+        if (ball.target === this && ball.teleTimer <= 0) {
             const elapsedSinceSwitch = performance.now() - ball.targetSetTime;
             if (elapsedSinceSwitch < this.currentReactionMs) return;
 
@@ -1764,9 +1992,9 @@ class Entity {
             const parryRange = 15 + (ball.speed * 2.5);
             const reactionZone = parryRange + (ball.speed * 6.5);
 
-            if ((ab === 'rapture' || ab === 'raging_deflect') && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
+            if ((ab === 'rapture' || ab === 'raging_deflect' || ab === 'aerodynamic_slash') && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
                 if (distToBall < 22 + ball.speed * 3.2 && !this.parryDecided) {
-                    const useChance = (aliveCount === 2 || ball.speed > 1.8) ? 0.7 : 0.42;
+                    const useChance = (aliveCount === 2 || ball.speed > 1.8) ? 0.68 : 0.4;
                     if (Math.random() < useChance) {
                         this.parryDecided = true;
                         this.activateAbility();
@@ -1775,8 +2003,14 @@ class Entity {
                 }
             }
 
-            if (ab !== 'rapture' && ab !== 'raging_deflect' && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
-                if (distToBall < reactionZone * 1.45 && Math.random() < (ab === 'forcefield' ? 0.09 : 0.04)) {
+            if (ab === 'ninja_dash' && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && distToBall < 32 && Math.random() < 0.14) {
+                this.parryDecided = true;
+                this.activateAbility();
+                return;
+            }
+
+            if (ab !== 'rapture' && ab !== 'raging_deflect' && ab !== 'aerodynamic_slash' && ab !== 'ninja_dash' && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
+                if (distToBall < reactionZone * 1.45 && Math.random() < (ab === 'forcefield' ? 0.09 : 0.035)) {
                     this.activateAbility();
                     if (this.isInvis || this.forcefieldTimer > 0) return;
                 }
@@ -1787,7 +2021,9 @@ class Entity {
                 let baseAcc = this.tier === 'sweat' ? 0.94 : (this.tier === 'pro' ? 0.89 : (this.tier === 'mid' ? 0.79 : 0.65));
                 let speedPenalty = ball.speed * (this.tier === 'sweat' ? 0.036 : (this.tier === 'pro' ? 0.045 : (this.tier === 'mid' ? 0.060 : 0.078)));
                 let successChance = Math.max(0.16, baseAcc - speedPenalty);
-                if (ball.raptureBoost) successChance *= (this.tier === 'sweat' ? 0.62 : (this.tier === 'pro' ? 0.50 : 0.34));
+                if (ball.raptureBoost || ball.aeroTimer > 0 || ball.martyrBall) {
+                    successChance *= (this.tier === 'sweat' ? 0.62 : (this.tier === 'pro' ? 0.50 : 0.34));
+                }
 
                 if (Math.random() < successChance) {
                     const jitter = this.tier === 'sweat' ? Math.random() * 35 : (this.tier === 'pro' ? Math.random() * 50 : Math.random() * 95);
@@ -1803,7 +2039,7 @@ class Entity {
 }
 
 // ==========================================
-// BALL + SMART TARGETING + COMET TRAIL + SCREEN INDICATOR
+// BALL + SMART TARGETING + SPECIAL BALL STATES + TRAIL
 // ==========================================
 const ballGroup = new THREE.Group();
 const ballCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -1834,6 +2070,14 @@ const iceShellMesh = new THREE.Mesh(
 );
 iceShellMesh.visible = false;
 ballGroup.add(iceShellMesh);
+
+const teleSphereMesh = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(5.4, 1),
+    new THREE.MeshBasicMaterial({ color: 0xbb33ff, wireframe: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })
+);
+teleSphereMesh.visible = false;
+ballGroup.add(teleSphereMesh);
+
 ballGroup.visible = false;
 scene.add(ballGroup);
 
@@ -1922,7 +2166,7 @@ function updateBallScreenIndicator() {
     ballArrowEl.style.display = 'block';
     ballArrowEl.style.left = `${px - 11}px`;
     ballArrowEl.style.top = `${py - 11}px`;
-    ballArrowEl.style.borderBottomColor = targetingMe ? '#ff1122' : '#00ddff';
+    ballArrowEl.style.borderBottomColor = targetingMe ? '#ff1122' : (ball.goldenBall ? '#ffd700' : '#00ddff');
     ballArrowEl.style.transform = `rotate(${90 - (angle * 180 / Math.PI)}deg)`;
 }
 
@@ -1935,9 +2179,28 @@ const ball = {
     vel: new THREE.Vector3(),
     raptureBoost: false,
     curveTimer: 0,
+    aeroTimer: 0,
+    aeroAngle: 0,
+    teleTimer: 0,
+    teleOwner: null,
+    goldenBall: false,
+    martyrBall: false,
     selfBounceGrace: 0,
     frozenTimer: 0,
     currentColorHex: 0x00eeff,
+
+    resetAllSpecials: function() {
+        this.raptureBoost = false;
+        this.curveTimer = 0;
+        this.aeroTimer = 0;
+        this.teleTimer = 0;
+        this.teleOwner = null;
+        this.goldenBall = false;
+        this.martyrBall = false;
+        this.selfBounceGrace = 0;
+        teleSphereMesh.visible = false;
+        this.unfreeze();
+    },
 
     freeze: function(frames) {
         this.frozenTimer = frames;
@@ -1954,11 +2217,33 @@ const ball = {
         }
     },
 
+    startTelekinesis: function(owner) {
+        this.unfreeze();
+        this.aeroTimer = 0;
+        this.curveTimer = 0;
+        this.teleTimer = 108;
+        this.teleOwner = owner;
+        teleSphereMesh.visible = true;
+        spawnShockwave(this.mesh.position, 0xcc44ff, 2, 16, 0.05, true);
+        spawnSparks(this.mesh.position, 0xcc44ff, 16, 1.0);
+        this.updateVisualColor();
+    },
+
     updateVisualColor: function() {
         let col = 0x00ddff;
         let coreCol = 0xffffff;
-        if (this.frozenTimer > 0) {
+        if (this.teleTimer > 0) {
+            col = 0xbb33ff; coreCol = 0xf0ccff;
+        } else if (this.frozenTimer > 0) {
             col = 0x00eeff; coreCol = 0xd8ffff;
+        } else if (this.martyrBall) {
+            col = this.target === mainPlayer ? 0xff0044 : 0xaa00ff;
+            coreCol = 0x1a0024;
+        } else if (this.goldenBall) {
+            col = this.target === mainPlayer ? 0xff5500 : 0xffd700;
+            coreCol = 0xfff5aa;
+        } else if (this.aeroTimer > 0) {
+            col = 0xff1144; coreCol = 0xffccdd;
         } else if (this.raptureBoost && this.curveTimer > 0) {
             col = this.target === mainPlayer ? 0xff1100 : 0xff5500;
             coreCol = 0xffeeaa;
@@ -1971,6 +2256,21 @@ const ball = {
         ballGlowSpriteMat.color.setHex(col);
         ballPointLight.color.setHex(col);
         ballGroundMat.color.setHex(col);
+    },
+
+    forceTarget: function(newTarget, hitBy) {
+        if (this.target && this.target.isAlive) this.target.setTargetHighlight(false);
+        this.lastHitBy = hitBy;
+        this.target = newTarget;
+        this.targetSetTime = performance.now();
+        if (this.target) {
+            this.target.setTargetHighlight(true);
+            if (this.target.isBot) {
+                this.target.parryDecided = false;
+                this.target.currentReactionMs = this.target.rollHumanReactionMs();
+            }
+        }
+        this.updateVisualColor();
     },
 
     selectSmartTarget: function(hitByEntity, candidates) {
@@ -2019,6 +2319,7 @@ const ball = {
             let chosen = ranked[0];
 
             const aliveTotal = players.filter(p => p.isAlive).length;
+            // Luck passive (25% deflect away, disabled in 1v1)
             if (aliveTotal > 2 && ranked.length > 1 && chosen.getCurrentAbility() === 'luck' && Math.random() < 0.25) {
                 if (chosen === mainPlayer) {
                     playSynth(600, 1100, 0.2, 'sine', 0.25);
@@ -2026,6 +2327,31 @@ const ball = {
                     spawnShockwave(chosen.mesh.position, 0x00ff66, 2, 13, 0.06, true);
                 }
                 chosen = ranked[1];
+            }
+
+            // Misfortune passive (30% attract ball to self, disabled in 1v1)
+            if (aliveTotal > 2 && visibleOthers.length > 1) {
+                const misf = visibleOthers.find(p => p !== chosen && p.getCurrentAbility() === 'misfortune');
+                if (misf && Math.random() < 0.30) {
+                    chosen = misf;
+                    spawnShockwave(misf.mesh.position, 0xff2288, 2, 13, 0.06, true);
+                    if (misf === mainPlayer) {
+                        playSynth(440, 220, 0.2, 'triangle', 0.24);
+                        showStatus('MISFORTUNE ПРИТЯНУЛ МЯЧ', '#ff2288', 1300);
+                    }
+                }
+            }
+
+            // Virus passive: infects whoever hit the ball at a Virus user
+            if (hitByEntity && hitByEntity.isAlive && hitByEntity !== chosen && chosen.getCurrentAbility() === 'virus') {
+                hitByEntity.virusTimer = 300;
+                spawnShockwave(hitByEntity.mesh.position, 0x22ff44, 2, 12, 0.06, true);
+                spawnSparks(hitByEntity.mesh.position, 0x22ff44, 10, 0.8);
+                if (hitByEntity === mainPlayer) {
+                    showStatus('ВИРУС: ЗАМЕДЛЕНИЕ 5с', '#22ff44', 1500);
+                } else if (chosen === mainPlayer) {
+                    showStatus(`ВИРУС ЗАРАЗИЛ ${hitByEntity.name}`, '#22ff44', 1300);
+                }
             }
 
             this.target = chosen;
@@ -2055,6 +2381,8 @@ const ball = {
 
     triggerRagingDeflect: function(caster) {
         this.unfreeze();
+        this.aeroTimer = 0;
+        this.martyrBall = false;
         this.raptureBoost = true;
         this.curveTimer = 26;
         this.speed = Math.min(Math.max(this.speed * 1.95, 2.2), 9.2);
@@ -2075,8 +2403,26 @@ const ball = {
         this.updateVisualColor();
     },
 
+    triggerAeroSlash: function(caster) {
+        this.unfreeze();
+        this.martyrBall = false;
+        this.raptureBoost = true;
+        this.curveTimer = 0;
+        this.aeroTimer = 46;
+        this.aeroAngle = 0;
+        this.speed = Math.min(Math.max(this.speed * 2.15, 2.5), 9.5);
+        this.pickNewTarget(caster);
+        spawnShockwave(caster.mesh.position, 0xff2255, 2, 22, 0.045, true);
+        spawnShockwave(this.mesh.position, 0xffffff, 1.5, 16, 0.05, true);
+        spawnSparks(this.mesh.position, 0xff2255, 24, 1.4);
+        if (this.target === caster) this.selfBounceGrace = 22;
+        this.updateVisualColor();
+    },
+
     triggerRaptureLaunch: function(caster) {
         this.unfreeze();
+        this.aeroTimer = 0;
+        this.martyrBall = false;
         this.raptureBoost = true;
         this.curveTimer = 42;
         this.speed = Math.min(Math.max(this.speed * 2.65, 2.6), 9.6);
@@ -2116,6 +2462,34 @@ const ball = {
 
         if (this.selfBounceGrace > 0) this.selfBounceGrace--;
 
+        // Telekinesis suspension
+        if (this.teleTimer > 0) {
+            this.teleTimer--;
+            this.mesh.position.y += (15 - this.mesh.position.y) * 0.08;
+            teleSphereMesh.rotation.y += 0.09;
+            teleSphereMesh.rotation.x += 0.06;
+            if (this.teleTimer % 18 === 0) spawnShockwave(this.mesh.position, 0xcc44ff, 2, 12, 0.07, true);
+            if (this.teleTimer <= 0) {
+                teleSphereMesh.visible = false;
+                const owner = (this.teleOwner && this.teleOwner.isAlive) ? this.teleOwner : null;
+                this.teleOwner = null;
+                this.speed = Math.min(Math.max(this.speed * 1.75, 2.5), 9.5);
+                this.raptureBoost = true;
+                this.curveTimer = 18;
+                this.pickNewTarget(owner);
+                if (this.target) {
+                    const launchDir = new THREE.Vector3().subVectors(this.target.mesh.position, this.mesh.position).normalize();
+                    this.vel.copy(launchDir).multiplyScalar(this.speed);
+                }
+                playClashSound(this.speed + 1.5);
+                spawnShockwave(this.mesh.position, 0xcc44ff, 2, 22, 0.05, true);
+                spawnSparks(this.mesh.position, 0xdd66ff, 22, 1.4);
+                if (owner === mainPlayer) addShake(1.1);
+                this.updateVisualColor();
+            }
+            return;
+        }
+
         if (this.frozenTimer > 0) {
             this.frozenTimer--;
             iceShellMesh.rotation.y += 0.05;
@@ -2144,28 +2518,81 @@ const ball = {
         if (this.selfBounceGrace <= 0 && dist < 6 + (this.speed * 0.55)) {
             if (this.target.parryActiveTimer > 0 || this.target.forcefieldTimer > 0) {
                 playClashSound(this.speed);
-                const reaperBonus = (this.target.getCurrentAbility() === 'reaper') ? this.target.reaperStacks * 0.16 : 0;
-                this.speed = Math.min(this.speed + 0.32 + reaperBonus, 9.2);
-                this.raptureBoost = false;
-                this.curveTimer = 0;
+                this.target.applyStandardParryBoost();
                 this.target.triggerParryImpactVFX(this.mesh.position.clone(), getSwordAccentColor(this.target.swordId));
                 this.pickNewTarget(this.target);
                 this.target.parryActiveTimer = 0;
                 this.target.blockCooldown = 0;
             } else {
-                this.target.die();
+                const victim = this.target;
+                const killer = this.lastHitBy;
+                const deathPos = victim.mesh.position.clone();
+                const preSpeed = this.speed;
+
+                victim.die();
                 if (!isCombatState()) return;
+
+                // Martyrdom passive: explode, slow killer, fire dark revenge ball straight back
+                if (victim.getCurrentAbility() === 'martyrdom' && killer && killer.isAlive && killer !== victim) {
+                    killer.martyrSlowTimer = 180;
+                    spawnShockwave(deathPos, 0xaa00ff, 2, 26, 0.04, true);
+                    spawnSparks(deathPos, 0xaa00ff, 24, 1.4);
+                    playSynth(160, 55, 0.4, 'sawtooth', 0.42);
+                    this.resetAllSpecials();
+                    this.martyrBall = true;
+                    this.selfBounceGrace = 12;
+                    this.speed = Math.min(Math.max(preSpeed * 1.15, 1.9), 9.0);
+                    this.mesh.position.set(deathPos.x, 6, deathPos.z);
+                    resetBallTrail();
+                    this.forceTarget(killer, victim);
+                    if (killer === mainPlayer) showStatus('MARTYRDOM: МЕСТЬ УБИТОГО', '#cc44ff', 1600);
+                    else if (victim === mainPlayer) showStatus('MARTYRDOM АКТИВИРОВАН', '#cc44ff', 1500);
+                    return;
+                }
+
+                // Golden Ball passive: no respawn in center, turns gold (+15% speed) and flies straight to next target
+                if (killer && killer.isAlive && killer.getCurrentAbility() === 'golden_ball') {
+                    spawnShockwave(deathPos, 0xffd700, 2, 22, 0.045, true);
+                    spawnSparks(deathPos, 0xffdd33, 24, 1.3);
+                    playSynth(680, 1280, 0.28, 'triangle', 0.32);
+                    this.resetAllSpecials();
+                    this.goldenBall = true;
+                    this.selfBounceGrace = 10;
+                    this.speed = Math.min(Math.max(preSpeed * 1.15, 1.55), 9.4);
+                    this.mesh.position.set(deathPos.x, 6, deathPos.z);
+                    this.pickNewTarget(killer);
+                    if (killer === mainPlayer) showStatus('GOLDEN BALL (+15% СКОР)', '#ffd700', 1400);
+                    return;
+                }
+
+                // Standard reset after kill
                 this.speed = 0.85;
-                this.raptureBoost = false;
-                this.curveTimer = 0;
-                this.selfBounceGrace = 0;
-                this.unfreeze();
+                this.resetAllSpecials();
                 resetBallTrail();
                 this.mesh.position.set(0, 6, centerZ);
                 this.pickNewTarget(null);
             }
         } else {
-            if (this.curveTimer > 0) {
+            if (this.aeroTimer > 0) {
+                this.aeroTimer--;
+                this.aeroAngle += 0.55;
+                if (this.aeroTimer > 20) {
+                    // Rising tornado vortex phase
+                    const horiz = dir.clone(); horiz.y = 0;
+                    if (horiz.lengthSq() > 0.001) horiz.normalize();
+                    this.mesh.position.x += horiz.x * (this.speed * 0.55) + Math.cos(this.aeroAngle) * 2.4;
+                    this.mesh.position.z += horiz.z * (this.speed * 0.55) + Math.sin(this.aeroAngle) * 2.4;
+                    this.mesh.position.y += 1.45;
+                    if (this.aeroTimer % 5 === 0) {
+                        spawnShockwave(this.mesh.position.clone(), 0xff2255, 1.5, 9, 0.08, true);
+                    }
+                } else {
+                    // High-speed downward dive onto target
+                    dir.normalize();
+                    this.mesh.position.add(dir.multiplyScalar(this.speed * 1.2));
+                    if (this.aeroTimer === 0) this.updateVisualColor();
+                }
+            } else if (this.curveTimer > 0) {
                 this.curveTimer--;
                 const desired = dir.clone().normalize().multiplyScalar(this.speed);
                 this.vel.lerp(desired, 0.09);
@@ -2214,6 +2641,7 @@ const training = {
     stop: function() {
         if (!this.active) return;
         this.active = false; this.ballMesh.visible = false;
+        hideBlockCdOverlay();
         if (mainPlayer && mainPlayer.isAlive && gameState === 'lobby') mainPlayer.setTargetHighlight(false);
         if (gameState === 'lobby') document.getElementById('btnBlock').style.display = 'none';
         document.getElementById('trainingHud').style.display = 'none';
@@ -2376,6 +2804,7 @@ function enterTestArena() {
     clearTestRespawnTimers();
     stopAllTouchControls();
     hideStatus();
+    hideBlockCdOverlay();
 
     gameState = 'test';
     testState.ability = gameData.equippedAbility;
@@ -2424,8 +2853,8 @@ function enterTestArena() {
     spawnShockwave(mainPlayer.mesh.position, 0xaa44ff, 2, 18, 0.05, true);
     showToast('Тестовая арена открыта');
 
-    ball.speed = 0.9; ball.raptureBoost = false; ball.curveTimer = 0;
-    ball.selfBounceGrace = 0; ball.unfreeze();
+    ball.speed = 0.9;
+    ball.resetAllSpecials();
     resetBallTrail();
     ball.mesh.position.set(0, 6, TEST_Z);
     ball.mesh.visible = true;
@@ -2469,6 +2898,7 @@ function startGame() {
     training.stop();
     stopAllTouchControls();
     hideStatus();
+    hideBlockCdOverlay();
     gameState = 'playing';
     matchKills = 0;
     camShake = 0;
@@ -2497,15 +2927,17 @@ function startGame() {
         p.setTargetHighlight(false); p.setOpacity(1);
         p.isInvis = false; p.invisTimer = 0; p.shadowTimer = 0;
         p.windTimer = 0; p.forcefieldTimer = 0; p.stunTimer = 0;
+        p.virusTimer = 0; p.scopoTimer = 0; p.scopoWeakHit = false; p.martyrSlowTimer = 0;
         p.blinkCharges = 3; p.reaperStacks = 0; p.velY = 0;
-        p.abilityReadyAt = 0;
-        p.shieldGroup.visible = false; p.windAuraGroup.visible = false; p.stunRing.visible = false;
+        p.abilityReadyAt = 0; p.blockCooldown = 0; p.parryActiveTimer = 0;
+        p.shieldGroup.visible = false; p.windAuraGroup.visible = false;
+        p.stunRing.visible = false; p.virusAura.visible = false; p.scopoAura.visible = false;
     });
     if (mainPlayer) snapCamera(mainPlayer.mesh.rotation.y + Math.PI, 1.08);
     updateAbilityHudIcon();
 
-    ball.speed = 0.85; ball.raptureBoost = false; ball.curveTimer = 0;
-    ball.selfBounceGrace = 0; ball.unfreeze();
+    ball.speed = 0.85;
+    ball.resetAllSpecials();
     resetBallTrail();
     ball.mesh.position.set(0, 6, 0);
     ball.mesh.visible = true;
@@ -2520,9 +2952,10 @@ function returnToLobby() {
     camShake = 0;
     eventCornerJumps = 0;
     hideStatus();
+    hideBlockCdOverlay();
     dangerVignetteEl.classList.remove('active');
     ballArrowEl.style.display = 'none';
-    ball.mesh.visible = false; ball.target = null; ball.unfreeze();
+    ball.mesh.visible = false; ball.target = null; ball.resetAllSpecials();
     ballGroundRing.visible = false;
     resetBallTrail();
 
@@ -2898,6 +3331,39 @@ document.getElementById('btnClaimPlaytime').addEventListener('click', () => {
     showToast(`Получено спинов: +${n}`);
 });
 
+// Save Export / Import
+const btnExportSave = document.getElementById('btnExportSave');
+if (btnExportSave) {
+    btnExportSave.addEventListener('click', () => {
+        const raw = localStorage.getItem('bladeBallV1') || JSON.stringify(gameData);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(raw)
+                .then(() => showToast('Сохранение скопировано'))
+                .catch(() => prompt('Скопируй код сохранения:', raw));
+        } else {
+            prompt('Скопируй код сохранения:', raw);
+        }
+    });
+}
+const btnImportSave = document.getElementById('btnImportSave');
+if (btnImportSave) {
+    btnImportSave.addEventListener('click', () => {
+        const raw = prompt('Вставь код сохранения:');
+        if (!raw) return;
+        try {
+            const parsed = JSON.parse(raw.trim());
+            if (typeof parsed.coins === 'number') {
+                localStorage.setItem('bladeBallV1', JSON.stringify(parsed));
+                location.reload();
+            } else {
+                showToast('Неверный формат сохранения');
+            }
+        } catch (e) {
+            showToast('Ошибка чтения сохранения');
+        }
+    });
+}
+
 // Boot & main loop
 spawnEntitiesInLobby();
 applyGraphicsSettings();
@@ -2915,6 +3381,9 @@ function updatePlayerEffectBar() {
     else if (mainPlayer.forcefieldTimer > 0) { ratio = mainPlayer.forcefieldTimer / mainPlayer.forcefieldMax; color = '#ff5522'; }
     else if (mainPlayer.windTimer > 0) { ratio = mainPlayer.windTimer / 600; color = '#00ff88'; }
     else if (mainPlayer.shadowTimer > 0) { ratio = mainPlayer.shadowTimer / 210; color = '#aa66ff'; }
+    else if (mainPlayer.scopoTimer > 0) { ratio = mainPlayer.scopoTimer / 240; color = '#ff1144'; }
+    else if (mainPlayer.virusTimer > 0) { ratio = mainPlayer.virusTimer / 300; color = '#22ff44'; }
+    else if (mainPlayer.martyrSlowTimer > 0) { ratio = mainPlayer.martyrSlowTimer / 180; color = '#aa44ff'; }
 
     if (ratio > 0) {
         effectBarContainer.style.display = 'block';
@@ -2939,11 +3408,9 @@ function animate() {
 
     if (starField.visible) starField.rotation.y += 0.00025;
 
-    // Smooth camera interpolation
     camThetaSmooth += (camTheta - camThetaSmooth) * 0.35;
     camPhiSmooth += (camPhi - camPhiSmooth) * 0.35;
 
-    // Recompute movement vector every frame using live camera angle
     if (joyActive && (Math.abs(joyX) > 0.08 || Math.abs(joyY) > 0.08)) {
         const sinT = Math.sin(camThetaSmooth);
         const cosT = Math.cos(camThetaSmooth);
@@ -2984,6 +3451,16 @@ function animate() {
             cdEl.innerText = Math.ceil(cdLeftMs / 1000);
         } else {
             cdEl.style.display = 'none';
+        }
+
+        const blkCdEl = document.getElementById('blockCdOverlay');
+        if (blkCdEl) {
+            if (mainPlayer.blockCooldown > 0 && mainPlayer.parryActiveTimer === 0 && (isCombatState() || training.active)) {
+                blkCdEl.style.display = 'flex';
+                blkCdEl.innerText = (mainPlayer.blockCooldown / 60).toFixed(1);
+            } else {
+                blkCdEl.style.display = 'none';
+            }
         }
 
         if (gameState === 'lobby') {
@@ -3029,28 +3506,3 @@ window.addEventListener('resize', () => {
 });
 
 animate();
-document.getElementById('btnExportSave').addEventListener('click', () => {
-    const raw = localStorage.getItem('bladeBallV1') || JSON.stringify(gameData);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(raw).then(() => showToast('Сохранение скопировано')).catch(() => prompt('Скопируй код сохранения:', raw));
-    } else {
-        prompt('Скопируй код сохранения:', raw);
-    }
-});
-
-document.getElementById('btnImportSave').addEventListener('click', () => {
-    const raw = prompt('Вставь код сохранения:');
-    if (!raw) return;
-    try {
-        const parsed = JSON.parse(raw.trim());
-        if (typeof parsed.coins === 'number') {
-            localStorage.setItem('bladeBallV1', JSON.stringify(parsed));
-            location.reload();
-        } else {
-            showToast('Неверный формат сохранения');
-        }
-    } catch (e) {
-        showToast('Ошибка чтения сохранения');
-    }
-});
-
