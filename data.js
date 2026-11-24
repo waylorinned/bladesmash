@@ -11,8 +11,18 @@ const ABILITIES = [
     { id: 'wind_cloak', name: 'Wind Cloak', img: 'Wind_Cloak.webp', price: 2000, wheelOnly: false, passive: false, cd: 30, desc: 'Аура ветра на 10с: скорость и высокий прыжок (КД 30с)' },
     { id: 'blink', name: 'Blink', img: 'Blink_new (1).webp', price: 2000, wheelOnly: false, passive: false, cd: 18, charges: 3, desc: '3 коротких телепорта подряд (КД 18с)' },
     { id: 'forcefield', name: 'Forcefield', img: 'Forcefield.webp', price: 2000, wheelOnly: false, passive: false, cd: 30, desc: 'Щит авто-отбива 7с (в 1 на 1 — 3с, КД 30с)' },
+    { id: 'swap', name: 'Swap', img: 'Swap.webp', price: 2000, wheelOnly: false, passive: false, cd: 24, desc: 'Мгновенно меняет вас местами с врагом в прицеле (КД 24с)' },
     { id: 'reaper', name: 'Reaper', img: 'Reaper.webp', price: 3000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: за каждое убийство (до x5) ускоряет бег и удар' },
     { id: 'raging_deflect', name: 'Raging Deflect', img: 'Raging_Deflect.webp', price: 4000, wheelOnly: false, passive: false, cd: 30, desc: 'Усиленный отбив x2 скорость и оглушение на 1.5с (КД 30с)' },
+    { id: 'martyrdom', name: 'Martyrdom', img: 'Martyrdom_new.webp', price: 4000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: при смерти взрывается и пускает тёмный мяч в убийцу' },
+    { id: 'scopophobia', name: 'Scopophobia', img: 'Scopophobia_image.webp', price: 4000, wheelOnly: false, passive: false, cd: 14, desc: 'Замедляет врага в прицеле на 4с и ослабляет его удар (КД 14с)' },
+    { id: 'misfortune', name: 'Misfortune', img: 'Misfortune.webp', price: 4000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: 30% шанс перехватить мяч на себя (отключён в 1 на 1)' },
+    { id: 'ninja_dash', name: 'Ninja Dash', img: 'Ninja_Dash.webp', price: 5000, wheelOnly: false, passive: false, cd: 16, desc: 'Рывок к мячу и авто-отбитие даже на КД блока (КД 16с)' },
+    { id: 'telekinesis', name: 'Telekinesis', img: 'Telekinesis_.webp', price: 5000, wheelOnly: false, passive: false, cd: 40, desc: 'Останавливает мяч в воздухе и пускает с x1.75 скоростью (КД 40с)' },
+    { id: 'pull', name: 'Pull', img: 'Pull.webp', price: 5000, wheelOnly: false, passive: false, cd: 30, desc: 'Перенаправляет таргет мяча на вас (КД 30с)' },
+    { id: 'virus', name: 'Virus', img: 'Virus.webp', price: 5000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: заражает отбившего в вас мяч (-35% скорость на 5с)' },
+    { id: 'aerodynamic_slash', name: 'Aerodynamic Slash', img: 'Aerodynamic_Slash.webp', price: 7000, wheelOnly: false, passive: false, cd: 35, desc: 'Закручивает мяч вихрем в небо и обрушивает на цель (КД 35с)' },
+    { id: 'golden_ball', name: 'Golden Ball', img: 'Golden_Ball.webp', price: 7000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: после килла мяч не респавнится, а золотой летит дальше (+15%)' },
     { id: 'rapture', name: 'Rapture', img: 'Rapture.webp', price: 0, wheelOnly: true, passive: false, cd: 30, desc: 'Апперкот с камнями, дугой вверх и x3 скоростью (2%)' }
 ];
 
@@ -70,8 +80,8 @@ const SKIN_PRESETS = {
     ]
 };
 
-const META_ABILITIES = ['rapture', 'invis', 'raging_deflect', 'forcefield', 'freeze', 'reaper'];
-const NORMAL_ABILITIES = ['dash', 'platform', 'super_jump', 'quad_jump', 'luck', 'thunder_dash', 'shadow_step', 'wind_cloak', 'blink'];
+const META_ABILITIES = ['rapture', 'invis', 'raging_deflect', 'forcefield', 'freeze', 'reaper', 'telekinesis', 'ninja_dash', 'pull', 'aerodynamic_slash', 'golden_ball'];
+const NORMAL_ABILITIES = ['dash', 'platform', 'super_jump', 'quad_jump', 'luck', 'thunder_dash', 'shadow_step', 'wind_cloak', 'blink', 'swap', 'martyrdom', 'scopophobia', 'misfortune', 'virus'];
 
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
