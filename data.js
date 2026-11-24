@@ -21,7 +21,7 @@ const SWORDS = [
     { id: 'prisma_blade', name: 'Neon Blade', img: '', price: 400, wheelOnly: false, objFile: 'Группа.obj', desc: 'Неоновый энергетический клинок' },
     { id: 'nebula_shard', name: 'Nebula Shard', img: 'NebulaSh.webp', price: 0, wheelOnly: true, desc: 'Космический осколок (Рулетка 1%)' },
     { id: 'nebula_staff', name: 'Nebula Staff', img: 'NebulaSt.webp', price: 0, wheelOnly: true, desc: 'Энергетический посох (Рулетка 0.25%)' },
-    { id: 'dual_nebula_staff', name: 'Dual Nebula Staff', img: 'DualNebualSt.webp', price: 0, wheelOnly: true, desc: 'Двойной посох (Рулетка 0.1%)' }
+    { id: 'dual_nebula_staff', name: 'Dual Nebula Staff', img: 'DualNebulaSt.webp', price: 0, wheelOnly: true, desc: 'Двойной посох (Рулетка 0.1%)' }
 ];
 
 const WHEEL_ITEMS = [
@@ -32,7 +32,7 @@ const WHEEL_ITEMS = [
     { id: 'ab_rapture', label: 'Rapture', short: 'Rapture', weight: 2, color: '#e74c3c', type: 'ability', val: 'rapture', img: 'Rapture.webp' },
     { id: 'sw_shard', label: 'Nebula Shard', short: 'N.Shard', weight: 1, color: '#6c5ce7', type: 'sword', val: 'nebula_shard', img: 'NebulaSh.webp' },
     { id: 'sw_staff', label: 'Nebula Staff', short: 'N.Staff', weight: 0.25, color: '#a55eea', type: 'sword', val: 'nebula_staff', img: 'NebulaSt.webp' },
-    { id: 'sw_dual', label: 'Dual Nebula Staff', short: 'DUAL', weight: 0.1, color: '#00d2d3', type: 'sword', val: 'dual_nebula_staff', img: 'DualNebualSt.webp' }
+    { id: 'sw_dual', label: 'Dual Nebula Staff', short: 'DUAL', weight: 0.1, color: '#00d2d3', type: 'sword', val: 'dual_nebula_staff', img: 'DualNebulaSt.webp' }
 ];
 
 const NAME_PREFIXES = ['xX_', 'Not', 'Real', 'Its', 'Pro', 'Dark', 'Neo', 'Hyper', 'Zxc', 'Lil', 'Vex', 'Kiro', 'Soul', 'Void', ''];
