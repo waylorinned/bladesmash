@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Blade Ball 3D</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+</head>
+<body>
+
+    <audio id="sfx-smash" src="smash.mp4" preload="auto"></audio>
+    <audio id="sfx-kill" src="kill.mp4" preload="auto"></audio>
+    <audio id="bgm-classic" src="classic.m4a" preload="auto"></audio>
+    <audio id="bgm-mystic" src="mystic.m4a" preload="auto"></audio>
+    <audio id="bgm-verygood" src="verygood.m4a" preload="auto"></audio>
+
+    <div id="gameCanvas"></div>
+    <div id="camera-zone"></div>
+    <div id="dangerVignette"></div>
+    <div id="ballArrow"></div>
+
+    <div id="ui">
+        <div id="leftHud">
+            <div class="hud-row">
+                <div class="hud-pill">Монеты: <span id="coinCount">0</span></div>
+                <div class="hud-pill" id="spinPill">Спины: <span id="spinCount">0</span></div>
+                <button id="btnPlaytime">Награда: <span id="sessionTimerTxt">10:00</span></button>
+                <div id="fpsBadge">60 FPS</div>
+            </div>
+            <div id="buffsRow"></div>
+        </div>
+
+        <div id="testPanel">
+            <select id="testAbSelect"></select>
+            <select id="testSwSelect"></select>
+            <button id="btnTestNoCd">КД: ВКЛ</button>
+            <button id="btnTestBotMode">БОТ: ОТБИВ</button>
+            <button id="btnTestSpeed">+СКОР</button>
+            <button id="btnTestExit">ВЫХОД</button>
+        </div>
+
+        <div id="topBar">
+            <div id="gameStateText">ЛОББИ: <span id="lobbyTimer">15</span>с</div>
+            <div id="aliveCountText">Живых: <span id="aliveCount">7</span></div>
+            <div id="trainingHud">ТРЕНИРОВКА | Отбитий: <span id="trainHits">0</span> | Скор: <span id="trainSpd">1.0</span></div>
+        </div>
+
+        <div id="killFeed">
+            <span id="killLine1">Вы устранили Bot</span>
+            <span id="killLine2">1x First Blood</span>
+        </div>
+
+        <div id="statusBanner"></div>
+        <div id="toastMsg"></div>
+
+        <div id="topRightBtns">
+            <button id="btnOpenSettings">ГРАФИКА</button>
+            <button id="btnOpenMenu">МАГАЗИН</button>
+        </div>
+
+        <button id="btnInteractWheel">КРУТИТЬ РУЛЕТКУ</button>
+
+        <div id="abilityMenu" class="modal">
+            <div class="modal-header">
+                <h2>МАГАЗИН</h2>
+                <button class="close-x" id="btnCloseMenu">✕</button>
+            </div>
+            <div class="tabs">
+                <button class="tab-btn active" id="tabAbilities">АБИЛКИ (15)</button>
+                <button class="tab-btn" id="tabSwords">МЕЧИ (5)</button>
+            </div>
+            <div id="abilityGrid" class="item-grid"></div>
+            <div id="swordGrid" class="item-grid" style="display:none;"></div>
+        </div>
+
+        <div id="settingsModal" class="modal">
+            <div class="modal-header">
+                <h2>НАСТРОЙКИ ГРАФИКИ</h2>
+                <button class="close-x" id="btnCloseSettings">✕</button>
+            </div>
+            <button id="btnAutoOpt" class="auto-opt-btn">АВТО-ОПТИМИЗАЦИЯ</button>
+            <div id="autoOptStatus">Автоматический подбор настроек под устройство</div>
+            <div class="preset-row">
+                <button class="preset-btn" id="presetUltra">УЛЬТРА</button>
+                <button class="preset-btn" id="presetMed">НОРМ</button>
+                <button class="preset-btn" id="presetFps">ФПС+</button>
+            </div>
+            <div class="opt-list">
+                <label class="opt-row"><span>Свечение (Bloom)</span><input type="checkbox" id="optBloom"></label>
+                <label class="opt-row"><span>Частицы и эффекты</span><input type="checkbox" id="optParticles"></label>
+                <label class="opt-row"><span>Звёзды и туманность</span><input type="checkbox" id="optStars"></label>
+                <label class="opt-row"><span>Счётчик FPS</span><input type="checkbox" id="optFpsShow"></label>
+                <div class="opt-row">
+                    <span>Качество картинки</span>
+                    <select id="optRes">
+                        <option value="0.75">Низкое (0.75x)</option>
+                        <option value="1">Среднее (1.0x)</option>
+                        <option value="1.5">Высокое (1.5x)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="wheelModal" class="modal">
+            <div class="modal-header">
+                <h2>КОЛЕСО ФОРТУНЫ</h2>
+                <button class="close-x" id="btnCloseWheel">✕</button>
+            </div>
+            <div id="wheelBody">
+                <div id="wheelWrap">
+                    <div id="wheelPointer"></div>
+                    <canvas id="wheelCanvas" width="240" height="240"></canvas>
+                </div>
+                <div id="wheelSide">
+                    <button id="btnSpinFree" class="spin-btn">БЕСПЛАТНЫЙ СПИН (<span id="freeSpinsModal">0</span>)</button>
+                    <button id="btnSpinCoins" class="spin-btn">ЗА 3,000 МОНЕТ (<span id="dailyLeftTxt">3</span>/3)</button>
+                    <div id="oddsBox">
+                        <b>Шансы выпадения:</b><br>
+                        250 монет — 29% | Быстрый прокрут (30м) — 27%<br>
+                        x2 Монеты (15м) — 24% | 500 монет — 17.9%<br>
+                        <span style="color:#ff6644"><b>Rapture</b> — 2%</span> | <span style="color:#aa77ff"><b>Nebula Shard</b> — 1%</span><br>
+                        <span style="color:#cc44ff"><b>Nebula Staff</b> — 0.25%</span> | <span style="color:#00ffff"><b>Dual Nebula Staff</b> — 0.1%</span><br>
+                        <span style="color:#aaa">Дубликат: +40 монет</span>
+                    </div>
+                    <div id="wheelResult"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="playtimeModal" class="modal">
+            <div class="modal-header">
+                <h2>НАГРАДА ЗА ВРЕМЯ</h2>
+                <button class="close-x" id="btnClosePlaytime">✕</button>
+            </div>
+            <p class="pt-desc">Каждые 10 минут в игре начисляется 1 бесплатный спин. Прогресс сохраняется.</p>
+            <div class="pt-box">
+                <div class="pt-row-top">
+                    <span>До следующего спина:</span>
+                    <b id="ptModalTime">10:00</b>
+                </div>
+                <div class="pt-bar-bg"><div id="ptProgressFill"></div></div>
+                <div class="pt-claim-row">
+                    <span>Доступно спинов: <b id="ptPendingCount">0</b></span>
+                    <button id="btnClaimPlaytime" class="pt-claim" disabled>ЗАБРАТЬ</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="platformControls">
+            <button id="btnUp" class="plat-btn">▲</button>
+            <button id="btnDown" class="plat-btn">▼</button>
+        </div>
+        <div id="joystick-zone"><div id="joystick-knob"></div></div>
+
+        <div id="right-actions">
+            <div id="btnAbility" class="action-btn ability-btn">
+                <img id="abImgDisplay" src="dash.webp" alt="">
+                <span id="abTextDisplay">DASH</span>
+                <div id="abChargeBadge"></div>
+                <div id="abCdOverlay" class="cd-overlay"></div>
+            </div>
+            <div id="btnJump" class="action-btn jump-btn">
+                <span>ПРЫЖОК</span>
+            </div>
+            <div id="btnBlock" class="action-btn block-btn">
+                <span>БЛОК</span>
+            </div>
+        </div>
+
+        <div id="effectBarContainer"><div id="effectBar"></div></div>
+
+        <div id="gameOver">
+            <span id="endMsg">ВЫ ВЫБЫЛИ</span>
+            <span id="rewardMsg"></span>
+            <button id="btnBackLobby">В ЛОББИ</button>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
