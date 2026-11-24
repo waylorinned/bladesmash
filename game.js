@@ -53,7 +53,10 @@ function saveGame() {
 function updateAbilityHudIcon() {
     const abId = gameState === 'test' ? testState.ability : gameData.equippedAbility;
     const ab = ABILITIES.find(a => a.id === abId) || ABILITIES[0];
-    document.getElementById('abImgDisplay').src = ab.img;
+    const abImg = document.getElementById('abImgDisplay');
+    abImg.onerror = () => { abImg.style.display = 'none'; };
+    abImg.style.display = 'block';
+    abImg.src = ab.img;
     document.getElementById('abTextDisplay').innerText = ab.passive ? 'ПАССИВ' : ab.name.toUpperCase();
     const badge = document.getElementById('abChargeBadge');
     if (ab.charges && mainPlayer) {
@@ -245,7 +248,7 @@ const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerH
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.05;
 document.getElementById('gameCanvas').appendChild(renderer.domElement);
 
 let composer = null;
@@ -256,19 +259,19 @@ function initBloom() {
     composer.addPass(new THREE.RenderPass(scene, camera));
     bloomPass = new THREE.UnrealBloomPass(
         new THREE.Vector2(window.innerWidth, window.innerHeight),
-        0.85,
-        0.48,
-        0.34
+        0.5,
+        0.35,
+        0.68
     );
     composer.addPass(bloomPass);
 }
 initBloom();
 
-scene.add(new THREE.AmbientLight(0x7c90c4, 0.72));
-const dirLight = new THREE.DirectionalLight(0xdceaff, 0.85);
+scene.add(new THREE.AmbientLight(0x7c90c4, 0.7));
+const dirLight = new THREE.DirectionalLight(0xdceaff, 0.8);
 dirLight.position.set(60, 140, 80);
 scene.add(dirLight);
-const rimLight = new THREE.DirectionalLight(0x6622ff, 0.5);
+const rimLight = new THREE.DirectionalLight(0x6622ff, 0.45);
 rimLight.position.set(-80, 60, -100);
 scene.add(rimLight);
 
@@ -322,8 +325,8 @@ function createNightSkyDome() {
     ctx.globalAlpha = 1;
 
     const moonGrad = ctx.createRadialGradient(620, 118, 12, 620, 118, 75);
-    moonGrad.addColorStop(0, 'rgba(230, 245, 255, 0.95)');
-    moonGrad.addColorStop(0.25, 'rgba(155, 200, 255, 0.45)');
+    moonGrad.addColorStop(0, 'rgba(220, 235, 255, 0.9)');
+    moonGrad.addColorStop(0.25, 'rgba(145, 190, 255, 0.4)');
     moonGrad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = moonGrad; ctx.fillRect(540, 40, 160, 160);
 
@@ -349,7 +352,7 @@ function createStarField() {
         pos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
     }
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    return new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xccddff, size: 2.2, transparent: true, opacity: 0.85, fog: false }));
+    return new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xbbccff, size: 2.0, transparent: true, opacity: 0.8, fog: false }));
 }
 const starField = createStarField();
 scene.add(starField);
@@ -361,7 +364,7 @@ function createNeonTileTexture(baseHex, lineHex, repeat) {
     ctx.fillStyle = baseHex; ctx.fillRect(0, 0, 256, 256);
     ctx.strokeStyle = lineHex; ctx.lineWidth = 4;
     ctx.strokeRect(2, 2, 252, 252);
-    ctx.strokeStyle = 'rgba(120,180,255,0.06)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(120,180,255,0.05)'; ctx.lineWidth = 2;
     ctx.strokeRect(18, 18, 220, 220);
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -369,20 +372,20 @@ function createNeonTileTexture(baseHex, lineHex, repeat) {
     return tex;
 }
 
-function createTextPlane(w, h, bgColor, borderColor, lines, textColor = '#b8d4ee') {
+function createTextPlane(w, h, bgColor, borderColor, lines, textColor = '#9abce0') {
     const c = document.createElement('canvas');
     c.width = 512; c.height = Math.round(512 * (h / w));
     const ctx = c.getContext('2d');
     ctx.fillStyle = bgColor; ctx.fillRect(0, 0, c.width, c.height);
     if (borderColor) {
-        ctx.strokeStyle = borderColor; ctx.lineWidth = 12;
-        ctx.strokeRect(6, 6, c.width - 12, c.height - 12);
+        ctx.strokeStyle = borderColor; ctx.lineWidth = 10;
+        ctx.strokeRect(5, 5, c.width - 10, c.height - 10);
     }
     ctx.fillStyle = textColor;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const step = c.height / (lines.length + 1);
     lines.forEach((line, idx) => {
-        ctx.font = `bold ${idx === 0 ? 46 : 32}px sans-serif`;
+        ctx.font = `bold ${idx === 0 ? 44 : 30}px sans-serif`;
         ctx.fillText(line, c.width / 2, step * (idx + 1));
     });
     const tex = new THREE.CanvasTexture(c);
@@ -392,17 +395,17 @@ function createTextPlane(w, h, bgColor, borderColor, lines, textColor = '#b8d4ee
     );
 }
 
-function createNameSprite(name, subText, color = '#dce8ff') {
+function createNameSprite(name, subText, color = '#cad8ee') {
     const c = document.createElement('canvas');
     c.width = 300; c.height = 84;
     const ctx = c.getContext('2d');
-    ctx.fillStyle = 'rgba(4,8,20,0.68)';
+    ctx.fillStyle = 'rgba(4,8,20,0.72)';
     ctx.fillRect(8, 8, 284, 68);
     ctx.font = 'bold 26px sans-serif';
     ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(name, 150, 30);
     ctx.font = 'bold 18px sans-serif';
-    ctx.fillStyle = '#99b0cc';
+    ctx.fillStyle = '#8aa4c2';
     ctx.fillText(subText, 150, 58);
     const tex = new THREE.CanvasTexture(c);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
@@ -413,24 +416,24 @@ function createNameSprite(name, subText, color = '#dce8ff') {
 // Arena (Z = 0)
 const arenaFloor = new THREE.Mesh(
     new THREE.BoxGeometry(220, 2, 220),
-    new THREE.MeshPhongMaterial({ map: createNeonTileTexture('#090f20', '#18427a', 22), shininess: 45, specular: 0x224477 })
+    new THREE.MeshPhongMaterial({ map: createNeonTileTexture('#090f20', '#18427a', 22), shininess: 35, specular: 0x1b3662 })
 );
 arenaFloor.position.set(0, -1, 0);
 scene.add(arenaFloor);
 
 const centerRing = new THREE.Mesh(
     new THREE.RingGeometry(6.2, 7.6, 40),
-    new THREE.MeshBasicMaterial({ color: 0xff2244, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.9 })
+    new THREE.MeshBasicMaterial({ color: 0xff2244, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85 })
 );
 centerRing.rotation.x = -Math.PI / 2; centerRing.position.set(0, 0.14, 0);
 scene.add(centerRing);
 
 const wallMat = new THREE.MeshLambertMaterial({ color: 0x102242, transparent: true, opacity: 0.78 });
-const wallEdgeMat = new THREE.MeshBasicMaterial({ color: 0x00ccff });
+const wallEdgeMat = new THREE.MeshBasicMaterial({ color: 0x0099cc });
 [[0, 4, -110, 220, 8, 2], [0, 4, 110, 220, 8, 2], [-110, 4, 0, 2, 8, 220], [110, 4, 0, 2, 8, 220]].forEach(w => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w[3], w[4], w[5]), wallMat);
     m.position.set(w[0], w[1], w[2]); scene.add(m);
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(w[3], 0.55, w[5]), wallEdgeMat);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(w[3], 0.5, w[5]), wallEdgeMat);
     trim.position.set(w[0], 8.1, w[2]); scene.add(trim);
 });
 
@@ -438,28 +441,28 @@ const wallEdgeMat = new THREE.MeshBasicMaterial({ color: 0x00ccff });
 const TEST_Z = -340;
 const testFloor = new THREE.Mesh(
     new THREE.BoxGeometry(180, 2, 180),
-    new THREE.MeshPhongMaterial({ map: createNeonTileTexture('#0b071d', '#3e1e8a', 18), shininess: 50, specular: 0x442288 })
+    new THREE.MeshPhongMaterial({ map: createNeonTileTexture('#0b071d', '#3e1e8a', 18), shininess: 40, specular: 0x331b6e })
 );
 testFloor.position.set(0, -1, TEST_Z);
 scene.add(testFloor);
 
 const testCenterRing = new THREE.Mesh(
     new THREE.RingGeometry(5.5, 7.0, 36),
-    new THREE.MeshBasicMaterial({ color: 0x00eeff, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.9 })
+    new THREE.MeshBasicMaterial({ color: 0x00ccff, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85 })
 );
 testCenterRing.rotation.x = -Math.PI / 2; testCenterRing.position.set(0, 0.14, TEST_Z);
 scene.add(testCenterRing);
 
 const testWallMat = new THREE.MeshLambertMaterial({ color: 0x190f38, transparent: true, opacity: 0.78 });
-const testEdgeMat = new THREE.MeshBasicMaterial({ color: 0xbb44ff });
+const testEdgeMat = new THREE.MeshBasicMaterial({ color: 0x8833cc });
 [[0, 4, TEST_Z - 90, 180, 8, 2], [0, 4, TEST_Z + 90, 180, 8, 2], [-90, 4, TEST_Z, 2, 8, 180], [90, 4, TEST_Z, 2, 8, 180]].forEach(w => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w[3], w[4], w[5]), testWallMat);
     m.position.set(w[0], w[1], w[2]); scene.add(m);
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(w[3], 0.55, w[5]), testEdgeMat);
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(w[3], 0.5, w[5]), testEdgeMat);
     trim.position.set(w[0], 8.1, w[2]); scene.add(trim);
 });
 
-const testSign = createTextPlane(36, 7, '#120828', '#aa44ff', ['ТЕСТ-АРЕНА', 'ПРОВЕРКА АБИЛОК И VFX']);
+const testSign = createTextPlane(36, 7, '#120828', '#8833cc', ['ТЕСТ-АРЕНА', 'ПРОВЕРКА АБИЛОК И VFX']);
 testSign.position.set(0, 13, TEST_Z - 87);
 scene.add(testSign);
 
@@ -467,7 +470,7 @@ scene.add(testSign);
 const LOBBY_Z = 320;
 const lobbyFloor = new THREE.Mesh(
     new THREE.BoxGeometry(160, 2, 160),
-    new THREE.MeshPhongMaterial({ map: createNeonTileTexture('#0c1124', '#223868', 16), shininess: 35, specular: 0x1d3566 })
+    new THREE.MeshPhongMaterial({ map: createNeonTileTexture('#0c1124', '#1d325c', 16), shininess: 25, specular: 0x16294d })
 );
 lobbyFloor.position.set(0, -1, LOBBY_Z);
 scene.add(lobbyFloor);
@@ -479,31 +482,31 @@ const lWallMat = new THREE.MeshLambertMaterial({ color: 0x182748, transparent: t
     m.position.set(w[0], w[1], w[2]); scene.add(m);
 });
 
-const spawnPad = new THREE.Mesh(new THREE.CylinderGeometry(11, 11.5, 0.4, 32), new THREE.MeshBasicMaterial({ color: 0x0066cc }));
+const spawnPad = new THREE.Mesh(new THREE.CylinderGeometry(11, 11.5, 0.4, 32), new THREE.MeshLambertMaterial({ color: 0x004c99 }));
 spawnPad.position.set(0, 0.2, LOBBY_Z - 4); scene.add(spawnPad);
-const spawnSign = createTextPlane(16, 4.5, '#061a3a', '#00aadd', ['СПАВН']);
+const spawnSign = createTextPlane(16, 4.5, '#061a3a', '#0088bb', ['СПАВН']);
 spawnSign.position.set(0, 0.45, LOBBY_Z - 4); spawnSign.rotation.x = -Math.PI / 2; scene.add(spawnSign);
 
 const WHEEL_PAD_POS = new THREE.Vector3(0, 0, LOBBY_Z + 28);
-const wheelPad = new THREE.Mesh(new THREE.CylinderGeometry(14, 14.5, 0.5, 32), new THREE.MeshBasicMaterial({ color: 0x8818bb }));
+const wheelPad = new THREE.Mesh(new THREE.CylinderGeometry(14, 14.5, 0.5, 32), new THREE.MeshLambertMaterial({ color: 0x6a1499 }));
 wheelPad.position.set(WHEEL_PAD_POS.x, 0.25, WHEEL_PAD_POS.z); scene.add(wheelPad);
-const wheelFloorText = createTextPlane(20, 6, '#240538', '#dd55ee', ['КОЛЕСО', 'ФОРТУНЫ']);
+const wheelFloorText = createTextPlane(20, 6, '#240538', '#aa33bb', ['КОЛЕСО', 'ФОРТУНЫ']);
 wheelFloorText.position.set(0, 0.55, LOBBY_Z + 28); wheelFloorText.rotation.x = -Math.PI / 2; scene.add(wheelFloorText);
-const wheelBanner = createTextPlane(32, 7, '#1d002e', '#cc33aa', ['РУЛЕТКА', 'RAPTURE & NEBULA']);
+const wheelBanner = createTextPlane(32, 7, '#1d002e', '#aa2890', ['РУЛЕТКА', 'RAPTURE & NEBULA']);
 wheelBanner.position.set(0, 6, LOBBY_Z + 48); wheelBanner.rotation.y = Math.PI; scene.add(wheelBanner);
 
-const mapTitle = createTextPlane(36, 6, '#0d182e', '#2b88cc', ['ВЫБОР КАРТЫ', '(СКОРО)']);
+const mapTitle = createTextPlane(36, 6, '#0d182e', '#2672aa', ['ВЫБОР КАРТЫ', '(СКОРО)']);
 mapTitle.position.set(0, 11, LOBBY_Z - 76); scene.add(mapTitle);
 [-22, 0, 22].forEach((mx, i) => {
     const pad = new THREE.Mesh(new THREE.BoxGeometry(19, 0.5, 16), new THREE.MeshLambertMaterial({ color: 0x1a3050 }));
     pad.position.set(mx, 0.25, LOBBY_Z - 64); scene.add(pad);
-    const numPlane = createTextPlane(14, 10, '#0a1626', '#4499cc', [`MAP ${i + 1}`]);
+    const numPlane = createTextPlane(14, 10, '#0a1626', '#3377aa', [`MAP ${i + 1}`]);
     numPlane.position.set(mx, 0.55, LOBBY_Z - 64); numPlane.rotation.x = -Math.PI / 2; scene.add(numPlane);
 });
 
-const eventPad = new THREE.Mesh(new THREE.CylinderGeometry(13, 13.5, 0.5, 32), new THREE.MeshBasicMaterial({ color: 0xcc6600 }));
+const eventPad = new THREE.Mesh(new THREE.CylinderGeometry(13, 13.5, 0.5, 32), new THREE.MeshLambertMaterial({ color: 0xaa5500 }));
 eventPad.position.set(56, 0.25, LOBBY_Z - 58); scene.add(eventPad);
-const eventSign = createTextPlane(24, 7, '#2a1500', '#cc8800', ['ИВЕНТЫ', 'СКОРО']);
+const eventSign = createTextPlane(24, 7, '#2a1500', '#aa6e00', ['ИВЕНТЫ', 'СКОРО']);
 eventSign.position.set(56, 9, LOBBY_Z - 72); scene.add(eventSign);
 
 // 3D Leaderboards
@@ -520,7 +523,7 @@ lbWinsMesh.position.set(76, 13, LOBBY_Z + 18); lbWinsMesh.rotation.y = -Math.PI 
 function drawLeaderboard(canvas, tex, title, accent, playerVal, prop) {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#060c1c'; ctx.fillRect(0, 0, 512, 512);
-    ctx.strokeStyle = accent; ctx.lineWidth = 12; ctx.strokeRect(6, 6, 500, 500);
+    ctx.strokeStyle = accent; ctx.lineWidth = 10; ctx.strokeRect(5, 5, 502, 502);
     ctx.fillStyle = accent; ctx.font = 'bold 40px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(title, 256, 60);
 
@@ -531,7 +534,7 @@ function drawLeaderboard(canvas, tex, title, accent, playerVal, prop) {
     all.forEach((row, i) => {
         const y = 130 + i * 53;
         ctx.textAlign = 'left';
-        ctx.fillStyle = row.isMe ? '#00bb66' : (row.tier === 'sweat' ? '#dd4455' : (row.tier === 'pro' ? '#ccaa00' : '#a8b8d0'));
+        ctx.fillStyle = row.isMe ? '#00aa55' : (row.tier === 'sweat' ? '#cc4455' : (row.tier === 'pro' ? '#bb9900' : '#95a8c4'));
         ctx.font = (row.isMe || row.tier === 'sweat') ? 'bold 27px sans-serif' : '25px sans-serif';
         ctx.fillText(`#${i + 1} ${row.name}`, 28, y);
         ctx.textAlign = 'right';
@@ -541,27 +544,27 @@ function drawLeaderboard(canvas, tex, title, accent, playerVal, prop) {
 }
 
 function updateLeaderboards3D() {
-    drawLeaderboard(lbKillsCanvas, lbKillsTex, 'SERVER: KILLS', '#bb3344', gameData.kills, 'kills');
-    drawLeaderboard(lbWinsCanvas, lbWinsTex, 'SERVER: WINS', '#bb9900', gameData.wins, 'wins');
+    drawLeaderboard(lbKillsCanvas, lbKillsTex, 'SERVER: KILLS', '#aa3344', gameData.kills, 'kills');
+    drawLeaderboard(lbWinsCanvas, lbWinsTex, 'SERVER: WINS', '#aa8800', gameData.wins, 'wins');
 }
 
 // Training area
 const TRAIN_X_MIN = -78, TRAIN_X_MAX = -38;
 const TRAIN_Z_MIN = LOBBY_Z - 75, TRAIN_Z_MAX = LOBBY_Z + 75;
-const trainFloor = new THREE.Mesh(new THREE.PlaneGeometry(40, 150), new THREE.MeshBasicMaterial({ color: 0x07201a, side: THREE.DoubleSide }));
+const trainFloor = new THREE.Mesh(new THREE.PlaneGeometry(40, 150), new THREE.MeshLambertMaterial({ color: 0x07201a, side: THREE.DoubleSide }));
 trainFloor.rotation.x = -Math.PI / 2; trainFloor.position.set(-58, 0.12, LOBBY_Z); scene.add(trainFloor);
 
-const trainLine = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 150), new THREE.MeshBasicMaterial({ color: 0x00ee88 }));
+const trainLine = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.4, 150), new THREE.MeshLambertMaterial({ color: 0x00aa66 }));
 trainLine.position.set(TRAIN_X_MAX, 0.2, LOBBY_Z); scene.add(trainLine);
 
-const trainSign = createTextPlane(30, 7, '#042219', '#00bb66', ['ТРЕНИРОВКА', 'ЗОНА ОТБИВАНИЯ']);
+const trainSign = createTextPlane(30, 7, '#042219', '#009955', ['ТРЕНИРОВКА', 'ЗОНА ОТБИВАНИЯ']);
 trainSign.position.set(-58, 12, LOBBY_Z - 73); scene.add(trainSign);
 
 const TRAIN_TARGET_POS = new THREE.Vector3(-58, 6, LOBBY_Z - 64);
 const targetGroup = new THREE.Group();
 targetGroup.position.copy(TRAIN_TARGET_POS);
-[[5.5, 1.0, 0xff2233], [3.6, 1.1, 0xcccccc], [1.6, 1.2, 0xff2233]].forEach(([r, d, col]) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d, 24), new THREE.MeshBasicMaterial({ color: col }));
+[[5.5, 1.0, 0xcc2233], [3.6, 1.1, 0x99aabb], [1.6, 1.2, 0xcc2233]].forEach(([r, d, col]) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d, 24), new THREE.MeshLambertMaterial({ color: col }));
     m.rotation.x = Math.PI / 2; targetGroup.add(m);
 });
 scene.add(targetGroup);
@@ -888,80 +891,141 @@ function getSwordAccentColor(swordId) {
 }
 
 // ==========================================
-// CAMERA & COMPACT JOYSTICK
+// SMOOTH CAMERA & FLOATING DYNAMIC JOYSTICK
 // ==========================================
-let camTheta = Math.PI, camPhi = 1.15, camRadius = 42;
+let camTheta = Math.PI, camPhi = 1.08, camRadius = 42;
+let camThetaSmooth = camTheta, camPhiSmooth = camPhi;
 let isCamDragging = false, lastTouchX = 0, lastTouchY = 0, camTouchId = null;
-const camZone = document.getElementById('camera-zone');
 
-camZone.addEventListener('touchstart', (e) => {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        if (camTouchId === null) {
-            camTouchId = e.changedTouches[i].identifier; isCamDragging = true;
-            lastTouchX = e.changedTouches[i].clientX; lastTouchY = e.changedTouches[i].clientY; break;
-        }
-    }
-});
-camZone.addEventListener('touchmove', (e) => {
-    if (!isCamDragging) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === camTouchId) {
-            camTheta -= (e.changedTouches[i].clientX - lastTouchX) * 0.01;
-            camPhi -= (e.changedTouches[i].clientY - lastTouchY) * 0.01;
-            camPhi = Math.max(0.18, Math.min(Math.PI / 2.1, camPhi));
-            lastTouchX = e.changedTouches[i].clientX; lastTouchY = e.changedTouches[i].clientY;
-        }
-    }
-});
-const resetCam = (e) => {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === camTouchId) { isCamDragging = false; camTouchId = null; }
-    }
-};
-camZone.addEventListener('touchend', resetCam);
-camZone.addEventListener('touchcancel', resetCam);
-
+let joyX = 0, joyY = 0;
 let moveX = 0, moveZ = 0, isMoving = false;
 let joyActive = false, joyStart = { x: 0, y: 0 }, joyTouchId = null;
-const maxJoy = 32;
-const knob = document.getElementById('joystick-knob'), zone = document.getElementById('joystick-zone');
+const maxJoy = 34;
+
+const camZone = document.getElementById('camera-zone');
+const knob = document.getElementById('joystick-knob');
+const zone = document.getElementById('joystick-zone');
+
+function snapCamera(theta, phi = 1.08) {
+    camTheta = theta;
+    camThetaSmooth = theta;
+    camPhi = phi;
+    camPhiSmooth = phi;
+}
+
+function startJoystick(touch) {
+    joyTouchId = touch.identifier;
+    joyActive = true;
+    const half = 46;
+    const cx = Math.max(half + 6, Math.min(window.innerWidth * 0.44, touch.clientX));
+    const cy = Math.max(76, Math.min(window.innerHeight - half - 6, touch.clientY));
+    joyStart.x = cx;
+    joyStart.y = cy;
+
+    zone.style.left = `${cx - half}px`;
+    zone.style.top = `${cy - half}px`;
+    zone.style.bottom = 'auto';
+
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxJoy) { dx = (dx / dist) * maxJoy; dy = (dy / dist) * maxJoy; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    joyX = dx / maxJoy;
+    joyY = dy / maxJoy;
+    isMoving = dist > 4;
+}
+
+function stopJoystick() {
+    joyActive = false;
+    joyTouchId = null;
+    joyX = 0;
+    joyY = 0;
+    moveX = 0;
+    moveZ = 0;
+    isMoving = false;
+    knob.style.transform = 'translate(0px, 0px)';
+    zone.style.left = '';
+    zone.style.top = '';
+    zone.style.bottom = '';
+}
+
+function stopAllTouchControls() {
+    stopJoystick();
+    isCamDragging = false;
+    camTouchId = null;
+}
 
 zone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
     e.stopPropagation();
     for (let i = 0; i < e.changedTouches.length; i++) {
         if (joyTouchId === null) {
-            joyTouchId = e.changedTouches[i].identifier; joyActive = true;
-            joyStart = { x: e.changedTouches[i].clientX, y: e.changedTouches[i].clientY }; break;
+            startJoystick(e.changedTouches[i]);
+            break;
         }
     }
-});
-zone.addEventListener('touchmove', (e) => {
-    e.stopPropagation(); if (!joyActive) return;
+}, { passive: false });
+
+camZone.addEventListener('touchstart', (e) => {
     for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === joyTouchId) {
-            let dx = e.changedTouches[i].clientX - joyStart.x, dy = e.changedTouches[i].clientY - joyStart.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > maxJoy) { dx = (dx / dist) * maxJoy; dy = (dy / dist) * maxJoy; }
+        const t = e.changedTouches[i];
+        // Left 42% of screen always controls floating joystick, never hijacks camera
+        if (t.clientX < window.innerWidth * 0.42 && t.clientY > 46) {
+            if (joyTouchId === null) {
+                e.preventDefault();
+                startJoystick(t);
+            }
+        } else {
+            if (camTouchId === null) {
+                e.preventDefault();
+                camTouchId = t.identifier;
+                isCamDragging = true;
+                lastTouchX = t.clientX;
+                lastTouchY = t.clientY;
+            }
+        }
+    }
+}, { passive: false });
+
+window.addEventListener('touchmove', (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (joyActive && t.identifier === joyTouchId) {
+            e.preventDefault();
+            let dx = t.clientX - joyStart.x;
+            let dy = t.clientY - joyStart.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > maxJoy) {
+                dx = (dx / dist) * maxJoy;
+                dy = (dy / dist) * maxJoy;
+            }
             knob.style.transform = `translate(${dx}px, ${dy}px)`;
-            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), camTheta);
-            const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), camTheta);
-            moveX = right.x * (dx / maxJoy) + forward.x * -(dy / maxJoy);
-            moveZ = right.z * (dx / maxJoy) + forward.z * -(dy / maxJoy);
+            joyX = dx / maxJoy;
+            joyY = dy / maxJoy;
             isMoving = dist > 4;
+        } else if (isCamDragging && t.identifier === camTouchId) {
+            e.preventDefault();
+            const dcx = t.clientX - lastTouchX;
+            const dcy = t.clientY - lastTouchY;
+            camTheta -= dcx * 0.0065;
+            camPhi -= dcy * 0.0042;
+            camPhi = Math.max(0.45, Math.min(1.3, camPhi));
+            lastTouchX = t.clientX;
+            lastTouchY = t.clientY;
         }
     }
-});
-const resetJoy = (e) => {
-    e.stopPropagation();
+}, { passive: false });
+
+const onGlobalTouchEnd = (e) => {
     for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === joyTouchId) {
-            joyActive = false; joyTouchId = null; moveX = 0; moveZ = 0; isMoving = false;
-            knob.style.transform = `translate(0px, 0px)`;
-        }
+        const id = e.changedTouches[i].identifier;
+        if (id === joyTouchId) stopJoystick();
+        if (id === camTouchId) { isCamDragging = false; camTouchId = null; }
     }
 };
-zone.addEventListener('touchend', resetJoy);
-zone.addEventListener('touchcancel', resetJoy);
+window.addEventListener('touchend', onGlobalTouchEnd);
+window.addEventListener('touchcancel', onGlobalTouchEnd);
 
 function addAccessoryToHead(headMesh, accType) {
     if (accType === 'crown') {
@@ -1122,7 +1186,7 @@ class Entity {
 
         this.platformMesh = new THREE.Mesh(
             new THREE.BoxGeometry(8, 0.9, 8),
-            new THREE.MeshBasicMaterial({ color: 0x00ff77, transparent: true, opacity: 0.78 })
+            new THREE.MeshBasicMaterial({ color: 0x00cc66, transparent: true, opacity: 0.78 })
         );
         this.platformMesh.visible = false;
         scene.add(this.platformMesh);
@@ -1161,7 +1225,6 @@ class Entity {
         const ringCol = this.getCurrentAbility() === 'quad_jump' ? 0xcc44ff : (this.windTimer > 0 ? 0x00ffaa : 0x88ccff);
         spawnShockwave(footPos, ringCol, 1.4, 7.5, 0.08, true);
 
-        // Secret test location trigger: 5 jumps in the events corner of the lobby
         if (!this.isBot && gameState === 'lobby') {
             const p = this.mesh.position;
             if (p.x >= 36 && p.z <= LOBBY_Z - 36) {
@@ -1520,6 +1583,8 @@ class Entity {
             return;
         }
 
+        if (gameState !== 'playing') return;
+
         this.isAlive = false;
         spawnKillBeam(this.mesh.position.clone(), this.explosionColor);
         scene.remove(this.mesh);
@@ -1549,7 +1614,13 @@ class Entity {
         }
 
         if (!this.isBot) {
+            gameState = 'gameover';
+            stopAllTouchControls();
             hideStatus();
+            ball.mesh.visible = false;
+            ball.target = null;
+            ballGroundRing.visible = false;
+            resetBallTrail();
             document.getElementById('dangerVignette').classList.remove('active');
             document.getElementById('ballArrow').style.display = 'none';
             const mult = isX2Active() ? 2 : 1;
@@ -1559,7 +1630,14 @@ class Entity {
                 `Убийств за матч: ${matchKills}\nНаграда: +${matchKills * 10 * mult} монет` + (mult > 1 ? ' (x2 буст)' : '');
             document.getElementById('gameOver').style.display = 'block';
         } else if (aliveList.length === 1 && aliveList[0] === mainPlayer) {
+            gameState = 'gameover';
+            stopAllTouchControls();
             hideStatus();
+            mainPlayer.setTargetHighlight(false);
+            ball.mesh.visible = false;
+            ball.target = null;
+            ballGroundRing.visible = false;
+            resetBallTrail();
             document.getElementById('dangerVignette').classList.remove('active');
             document.getElementById('ballArrow').style.display = 'none';
             const mult = isX2Active() ? 2 : 1;
@@ -1589,7 +1667,6 @@ class Entity {
         this.updateVerticalPhysics();
         this.updateParryLogic();
 
-        // Test bot AI
         if (this.isTestBot && gameState === 'test') {
             if (testState.botMode === 'dummy') {
                 this.animateWalk(false);
@@ -1599,7 +1676,6 @@ class Entity {
                 }
                 return;
             }
-            // Parry sparring mode
             if (this.mesh.position.distanceTo(this.targetWalkPos) < 5 || Math.random() < 0.015) {
                 const anchorX = this.testSlot === 0 ? -24 : 24;
                 this.targetWalkPos.set(anchorX + (Math.random() - 0.5) * 32, this.baseY, TEST_Z - 26 + (Math.random() - 0.5) * 30);
@@ -1897,13 +1973,11 @@ const ball = {
         ballGroundMat.color.setHex(col);
     },
 
-    // Smart Blade Ball targeting: aim direction + proximity + close-behind snap
     selectSmartTarget: function(hitByEntity, candidates) {
         if (candidates.length === 1) return [candidates[0]];
 
         if (!hitByEntity) {
-            const shuffled = candidates.slice().sort(() => Math.random() - 0.5);
-            return shuffled;
+            return candidates.slice().sort(() => Math.random() - 0.5);
         }
 
         if (hitByEntity === mainPlayer) {
@@ -1923,11 +1997,8 @@ const ball = {
             const dist = Math.max(0.1, _toCand.length());
             const dot = _aimDir.dot(_toCand.divideScalar(dist));
 
-            // Strong priority for players in front of the hitter's view
             const aimScore = Math.pow(Math.max(0, (dot + 1) * 0.5), 2.5) * 1.45;
-            // Closer players always get higher priority
             const distScore = 30 / (dist + 10);
-            // If someone stands very close (even behind), ball can snap to them
             const closeBonus = dist < 26 ? ((26 - dist) / 26) * 1.65 : 0;
             const score = aimScore + distScore + closeBonus + Math.random() * 0.14;
             return { entity: c, score };
@@ -2083,6 +2154,7 @@ const ball = {
                 this.target.blockCooldown = 0;
             } else {
                 this.target.die();
+                if (!isCombatState()) return;
                 this.speed = 0.85;
                 this.raptureBoost = false;
                 this.curveTimer = 0;
@@ -2302,6 +2374,7 @@ function enterTestArena() {
     training.stop();
     clearInterval(lobbyTimerHandle);
     clearTestRespawnTimers();
+    stopAllTouchControls();
     hideStatus();
 
     gameState = 'test';
@@ -2341,7 +2414,7 @@ function enterTestArena() {
     }, false);
     mainPlayer.mesh.position.set(0, mainPlayer.baseY, TEST_Z + 28);
     mainPlayer.mesh.rotation.y = Math.PI;
-    camTheta = 0;
+    snapCamera(0, 1.08);
 
     spawnTestBot(0);
     spawnTestBot(1);
@@ -2394,6 +2467,7 @@ function startLobbyTimer() {
 
 function startGame() {
     training.stop();
+    stopAllTouchControls();
     hideStatus();
     gameState = 'playing';
     matchKills = 0;
@@ -2427,6 +2501,7 @@ function startGame() {
         p.abilityReadyAt = 0;
         p.shieldGroup.visible = false; p.windAuraGroup.visible = false; p.stunRing.visible = false;
     });
+    if (mainPlayer) snapCamera(mainPlayer.mesh.rotation.y + Math.PI, 1.08);
     updateAbilityHudIcon();
 
     ball.speed = 0.85; ball.raptureBoost = false; ball.curveTimer = 0;
@@ -2439,6 +2514,7 @@ function startGame() {
 
 function returnToLobby() {
     clearTestRespawnTimers();
+    stopAllTouchControls();
     gameState = 'lobby';
     platformMoveDir = 0;
     camShake = 0;
@@ -2464,7 +2540,7 @@ function returnToLobby() {
 
     rotateServerPlayers();
     spawnEntitiesInLobby();
-    camTheta = Math.PI;
+    snapCamera(Math.PI, 1.08);
     updateLeaderboards3D();
     updateAbilityHudIcon();
     startLobbyTimer();
@@ -2494,7 +2570,7 @@ document.getElementById('btnBlock').addEventListener('touchstart', (e) => {
 // Shop
 const menuModal = document.getElementById('abilityMenu');
 document.getElementById('btnOpenMenu').addEventListener('click', (e) => {
-    e.stopPropagation(); renderShop(); menuModal.style.display = 'flex';
+    e.stopPropagation(); stopAllTouchControls(); renderShop(); menuModal.style.display = 'flex';
 });
 document.getElementById('btnCloseMenu').addEventListener('click', (e) => {
     e.stopPropagation(); menuModal.style.display = 'none';
@@ -2621,7 +2697,7 @@ function setGfxPreset(name) {
 }
 
 document.getElementById('btnOpenSettings').addEventListener('click', (e) => {
-    e.stopPropagation(); applyGraphicsSettings(); document.getElementById('settingsModal').style.display = 'flex';
+    e.stopPropagation(); stopAllTouchControls(); applyGraphicsSettings(); document.getElementById('settingsModal').style.display = 'flex';
 });
 document.getElementById('btnCloseSettings').addEventListener('click', (e) => {
     e.stopPropagation(); document.getElementById('settingsModal').style.display = 'none';
@@ -2761,7 +2837,7 @@ function grantWheelPrize(item) {
     resBox.style.display = 'block';
 }
 
-document.getElementById('btnInteractWheel').addEventListener('click', (e) => { e.stopPropagation(); saveGame(); document.getElementById('wheelModal').style.display = 'flex'; });
+document.getElementById('btnInteractWheel').addEventListener('click', (e) => { e.stopPropagation(); stopAllTouchControls(); saveGame(); document.getElementById('wheelModal').style.display = 'flex'; });
 document.getElementById('btnCloseWheel').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('wheelModal').style.display = 'none'; });
 document.getElementById('btnSpinFree').addEventListener('click', () => spinWheel(false));
 document.getElementById('btnSpinCoins').addEventListener('click', () => spinWheel(true));
@@ -2812,7 +2888,7 @@ setInterval(() => {
     updatePlaytimeUI();
 }, 1000);
 
-document.getElementById('btnPlaytime').addEventListener('click', (e) => { e.stopPropagation(); updatePlaytimeUI(); document.getElementById('playtimeModal').style.display = 'flex'; });
+document.getElementById('btnPlaytime').addEventListener('click', (e) => { e.stopPropagation(); stopAllTouchControls(); updatePlaytimeUI(); document.getElementById('playtimeModal').style.display = 'flex'; });
 document.getElementById('btnClosePlaytime').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('playtimeModal').style.display = 'none'; });
 document.getElementById('btnClaimPlaytime').addEventListener('click', () => {
     const n = gameData.pendingPlaytimeSpins || 0;
@@ -2863,12 +2939,29 @@ function animate() {
 
     if (starField.visible) starField.rotation.y += 0.00025;
 
+    // Smooth camera interpolation
+    camThetaSmooth += (camTheta - camThetaSmooth) * 0.35;
+    camPhiSmooth += (camPhi - camPhiSmooth) * 0.35;
+
+    // Recompute movement vector every frame using live camera angle
+    if (joyActive && (Math.abs(joyX) > 0.08 || Math.abs(joyY) > 0.08)) {
+        const sinT = Math.sin(camThetaSmooth);
+        const cosT = Math.cos(camThetaSmooth);
+        moveX = cosT * joyX + (-sinT) * (-joyY);
+        moveZ = (-sinT) * joyX + (-cosT) * (-joyY);
+        isMoving = true;
+    } else {
+        moveX = 0;
+        moveZ = 0;
+        isMoving = false;
+    }
+
     if (mainPlayer && mainPlayer.isAlive) {
         mainPlayer.updateBuffTimers();
         mainPlayer.updateVerticalPhysics();
 
         const spd = mainPlayer.getMoveSpeed();
-        if ((moveX !== 0 || moveZ !== 0) && spd > 0) {
+        if ((moveX !== 0 || moveZ !== 0) && spd > 0 && gameState !== 'gameover') {
             mainPlayer.mesh.position.x += moveX * spd;
             mainPlayer.mesh.position.z += moveZ * spd;
             mainPlayer.mesh.rotation.y = Math.atan2(moveX, moveZ);
@@ -2880,7 +2973,7 @@ function animate() {
             mainPlayer.platformMesh.position.set(mainPlayer.mesh.position.x, mainPlayer.mesh.position.y - 7, mainPlayer.mesh.position.z);
         }
 
-        mainPlayer.animateWalk(isMoving);
+        mainPlayer.animateWalk(isMoving && gameState !== 'gameover');
         mainPlayer.updateParryLogic();
         updatePlayerEffectBar();
 
@@ -2912,9 +3005,9 @@ function animate() {
         const sy = camShake > 0.02 ? (Math.random() - 0.5) * camShake : 0;
         camShake *= 0.84;
 
-        camera.position.x = mainPlayer.mesh.position.x + camRadius * Math.sin(camPhi) * Math.sin(camTheta) + sx;
-        camera.position.z = mainPlayer.mesh.position.z + camRadius * Math.sin(camPhi) * Math.cos(camTheta);
-        camera.position.y = mainPlayer.mesh.position.y + camRadius * Math.cos(camPhi) + sy;
+        camera.position.x = mainPlayer.mesh.position.x + camRadius * Math.sin(camPhiSmooth) * Math.sin(camThetaSmooth) + sx;
+        camera.position.z = mainPlayer.mesh.position.z + camRadius * Math.sin(camPhiSmooth) * Math.cos(camThetaSmooth);
+        camera.position.y = mainPlayer.mesh.position.y + camRadius * Math.cos(camPhiSmooth) + sy;
         camera.lookAt(mainPlayer.mesh.position);
     }
 
