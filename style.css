@@ -1,0 +1,330 @@
+* { box-sizing: border-box; }
+body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background-color: #02030a;
+    touch-action: none; font-family: 'Segoe UI', sans-serif;
+    user-select: none; -webkit-user-select: none;
+}
+
+#gameCanvas { position: absolute; inset: 0; z-index: 1; }
+#camera-zone { position: absolute; inset: 0; z-index: 2; touch-action: none; }
+#ui { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+
+/* КРАСНАЯ ВИНЬЕТКА ОПАСНОСТИ (КОГДА МЯЧ ЛЕТИТ НА ТЕБЯ) */
+#dangerVignette {
+    position: absolute; inset: 0; z-index: 5; pointer-events: none;
+    opacity: 0; transition: opacity 0.12s ease;
+    box-shadow: inset 0 0 65px rgba(255, 20, 40, 0.72), inset 0 0 18px rgba(255, 40, 60, 0.85);
+}
+#dangerVignette.active { opacity: 1; }
+
+/* СТРЕЛКА УКАЗАТЕЛЯ МЯЧА ЗА ЭКРАНОМ */
+#ballArrow {
+    display: none; position: absolute; z-index: 12; pointer-events: none;
+    width: 0; height: 0;
+    border-left: 11px solid transparent;
+    border-right: 11px solid transparent;
+    border-bottom: 22px solid #ff2233;
+    filter: drop-shadow(0 0 8px #ff0022);
+    transform-origin: center center;
+}
+
+/* ВЕРХНЯЯ ПАНЕЛЬ СЛЕВА (КОМПАКТНАЯ) */
+#leftHud {
+    position: absolute; top: 6px; left: 8px;
+    display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+}
+.hud-row { display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; }
+.hud-pill {
+    pointer-events: auto; background: rgba(6, 12, 28, 0.78);
+    border: 1.5px solid #ffd700; border-radius: 7px;
+    padding: 2px 7px; color: #ffd700; font-weight: 700; font-size: 11px;
+    white-space: nowrap;
+}
+#spinPill { border-color: #ff44cc; color: #ff88ee; }
+#btnPlaytime {
+    pointer-events: auto; background: rgba(18, 30, 62, 0.85);
+    border: 1.5px solid #00e5ff; border-radius: 7px; padding: 2px 7px;
+    color: #fff; font-weight: 700; font-size: 11px; white-space: nowrap;
+}
+#btnPlaytime.ready { border-color: #00ff66; box-shadow: 0 0 10px #00ff66; }
+#fpsBadge {
+    display: none; background: rgba(0, 0, 0, 0.65); border: 1px solid #00ff88;
+    border-radius: 6px; padding: 2px 6px; color: #00ff88; font-size: 10px; font-weight: bold;
+}
+#buffsRow { display: flex; gap: 4px; flex-wrap: wrap; }
+.buff-badge {
+    background: rgba(0, 180, 255, 0.25); border: 1px solid #00e5ff;
+    border-radius: 5px; padding: 1px 6px; font-size: 10px; color: #aef; font-weight: bold;
+}
+
+/* ВЕРХ ЦЕНТР (НЕ ПЕРЕКРЫВАЕТ ЛЕВЫЙ HUD) */
+#topBar {
+    position: absolute; top: 6px; left: 56%; transform: translateX(-50%);
+    text-align: center; color: #fff; text-shadow: 0 1px 4px #000;
+    pointer-events: none;
+}
+#gameStateText { font-size: 13px; font-weight: 900; color: #ffbb00; letter-spacing: 0.5px; white-space: nowrap; }
+#aliveCountText { font-size: 13px; font-weight: 800; display: none; white-space: nowrap; color: #eef6ff; }
+#trainingHud {
+    display: none; margin-top: 2px; background: rgba(0, 255, 130, 0.16);
+    border: 1px solid #00ff88; border-radius: 6px; padding: 1px 8px;
+    font-size: 10px; color: #88ffbb; font-weight: bold; white-space: nowrap;
+}
+
+/* КИЛЛ-ФИД (ТОНКАЯ КОМПАКТНАЯ ПОЛОСКА СВЕРХУ, НЕ МЕШАЕТ ОБЗОРУ) */
+#killFeed {
+    display: none; position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+    text-align: center; pointer-events: none; z-index: 40;
+    background: linear-gradient(90deg, transparent, rgba(165, 0, 20, 0.82), transparent);
+    padding: 3px 22px; border-bottom: 1.5px solid #ff4455;
+    white-space: nowrap; animation: popIn 0.18s ease-out;
+}
+@keyframes popIn {
+    from { transform: translateX(-50%) scale(0.85); opacity: 0; }
+    to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+#killLine1 { color: #fff; font-size: 12px; font-weight: 800; text-shadow: 0 0 6px #ff0022; margin-right: 8px; }
+#killLine2 { color: #ffd700; font-size: 12px; font-weight: 900; text-shadow: 0 0 8px #ffaa00; }
+
+/* СТАТУСЫ И УВЕДОМЛЕНИЯ (СНИЗУ, ВНЕ ЦЕНТРА ЭКРАНА) */
+#statusBanner {
+    display: none; position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+    background: rgba(15, 10, 25, 0.82); border: 1.5px solid #ffaa00; border-radius: 7px;
+    padding: 3px 12px; color: #fff; font-weight: 800; font-size: 11px;
+    text-shadow: 0 1px 3px #000; z-index: 45; white-space: nowrap;
+}
+#toastMsg {
+    display: none; position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%);
+    background: rgba(10, 24, 52, 0.92); border: 1.5px solid #00ff88; border-radius: 8px;
+    padding: 4px 12px; color: #00ff88; font-weight: bold; font-size: 11px;
+    z-index: 60; white-space: nowrap;
+}
+
+/* ПРАВЫЙ ВЕРХ (КОМПАКТНЫЕ КНОПКИ) */
+#topRightBtns {
+    position: absolute; top: 6px; right: 8px;
+    display: flex; gap: 5px; pointer-events: none;
+}
+#btnOpenSettings, #btnOpenMenu {
+    pointer-events: auto; padding: 4px 9px; font-size: 11px; font-weight: 800;
+    background: linear-gradient(180deg, #0066ff, #002899);
+    color: #fff; border: 1.5px solid #66ccff; border-radius: 7px;
+}
+#btnOpenSettings { background: rgba(24, 36, 62, 0.88); border-color: #7799cc; }
+
+#btnInteractWheel {
+    display: none; position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    pointer-events: auto; padding: 7px 16px; font-size: 12px; font-weight: 900;
+    background: linear-gradient(180deg, #dd22bb, #880099);
+    color: #fff; border: 2px solid #fff; border-radius: 10px;
+    box-shadow: 0 0 14px rgba(255, 50, 200, 0.6);
+}
+
+/* БОЕВЫЕ КНОПКИ СПРАВА (ЭРГОНОМИЧНАЯ ДУГА ДЛЯ ТЕЛЕФОНА) */
+#right-actions {
+    position: absolute; right: 12px; bottom: 12px;
+    width: 144px; height: 118px; pointer-events: none;
+}
+.action-btn {
+    pointer-events: auto; position: absolute;
+    border-radius: 50%; color: #fff; font-weight: 900;
+    display: none; justify-content: center; align-items: center; text-align: center;
+    flex-direction: column; overflow: hidden;
+    backdrop-filter: blur(2px);
+}
+.action-btn:active { transform: scale(0.9); }
+
+.action-btn.block-btn {
+    right: 0; bottom: 0; width: 64px; height: 64px; font-size: 12px;
+    border: 2.5px solid #ff3344; background: rgba(165, 0, 18, 0.68);
+    box-shadow: 0 0 14px rgba(255, 30, 50, 0.55);
+}
+.action-btn.ability-btn {
+    right: 74px; bottom: 2px; width: 52px; height: 52px; font-size: 8px;
+    border: 2px solid #55aaff; background: rgba(0, 38, 130, 0.68);
+    box-shadow: 0 0 12px rgba(0, 110, 255, 0.5);
+}
+.action-btn.ability-btn img { width: 28px; height: 28px; object-fit: contain; pointer-events: none; }
+
+.action-btn.jump-btn {
+    display: flex; right: 8px; bottom: 72px; width: 44px; height: 44px; font-size: 8.5px;
+    border: 2px solid #00ffaa; background: rgba(0, 110, 82, 0.58);
+    box-shadow: 0 0 10px rgba(0, 220, 150, 0.45);
+}
+
+#abChargeBadge {
+    display: none; position: absolute; top: 2px; right: 6px;
+    background: #00ddff; color: #000; font-size: 9px; font-weight: 900;
+    padding: 0 4px; border-radius: 6px;
+}
+.cd-overlay {
+    display: none; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.74);
+    color: #fff; font-size: 16px; font-weight: 900;
+    justify-content: center; align-items: center;
+}
+
+/* ДЖОЙСТИК (КОМПАКТНЫЙ) */
+#joystick-zone {
+    position: absolute; bottom: 14px; left: 16px; width: 92px; height: 92px;
+    background: rgba(255, 255, 255, 0.08); border-radius: 50%;
+    pointer-events: auto; border: 1.5px solid rgba(255, 255, 255, 0.24);
+}
+#joystick-knob {
+    position: absolute; top: 28px; left: 28px; width: 34px; height: 34px;
+    background: rgba(255, 255, 255, 0.48); border-radius: 50%;
+}
+
+/* ПЛАТФОРМА */
+#platformControls {
+    display: none; position: absolute; top: 50%; left: 14px; transform: translateY(-50%);
+    pointer-events: auto; flex-direction: column; gap: 8px;
+}
+.plat-btn {
+    width: 40px; height: 40px; font-size: 16px;
+    background: rgba(0, 200, 80, 0.4); border: 1.5px solid #00ff66;
+    border-radius: 10px; color: #fff; font-weight: bold;
+}
+
+/* ПОЛОСКА ЭФФЕКТА */
+#effectBarContainer {
+    display: none; position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    width: 170px; height: 8px; background: rgba(0, 0, 0, 0.6);
+    border: 1.5px solid #00ffff; border-radius: 5px; pointer-events: none;
+}
+#effectBar { width: 100%; height: 100%; background: #00ffff; border-radius: 3px; }
+
+/* МОДАЛЬНЫЕ ОКНА */
+.modal {
+    display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 88%; max-width: 680px; max-height: 88%;
+    background: rgba(8, 16, 36, 0.96); border: 2px solid #33aaff;
+    border-radius: 14px; padding: 12px; pointer-events: auto;
+    flex-direction: column; z-index: 200; color: #fff;
+    box-shadow: 0 0 28px rgba(0, 120, 255, 0.45);
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.modal-header h2 { margin: 0; font-size: 14px; color: #66ccff; }
+.close-x {
+    background: #ff3344; color: #fff; border: none; border-radius: 7px;
+    padding: 4px 11px; font-weight: bold; font-size: 13px;
+}
+.tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+.tab-btn {
+    flex: 1; padding: 6px; background: #14244a; color: #aac;
+    border: 1.5px solid #335588; border-radius: 7px; font-weight: bold; font-size: 12px;
+}
+.tab-btn.active { background: #0066ff; color: #fff; border-color: #66ddff; }
+
+.item-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 8px; overflow-y: auto; padding-right: 4px;
+}
+.item-card {
+    background: linear-gradient(145deg, #102044, #1b3668);
+    border: 1.5px solid #4477bb; border-radius: 10px;
+    padding: 7px 5px; text-align: center;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: space-between; gap: 3px;
+}
+.item-card.selected { border-color: #00ff66; box-shadow: 0 0 12px #00ff66; }
+.item-card.wheel-only { border-color: #cc44ff; }
+.item-card img {
+    width: 42px; height: 42px; object-fit: contain;
+    border-radius: 7px; background: rgba(0, 0, 0, 0.4); padding: 2px;
+}
+.item-name { font-size: 11px; font-weight: bold; line-height: 1.15; }
+.item-sub { font-size: 9px; color: #99bbdd; line-height: 1.2; }
+.item-price {
+    font-size: 10px; color: #ffd700; font-weight: bold;
+    background: rgba(0, 0, 0, 0.55); padding: 2px 5px; border-radius: 5px; width: 100%;
+}
+.item-price.owned { color: #00ff88; }
+.item-price.locked-wheel { color: #ff88ff; }
+
+/* НАСТРОЙКИ ГРАФИКИ */
+.auto-opt-btn {
+    width: 100%; padding: 9px; font-size: 13px; font-weight: 900;
+    background: linear-gradient(90deg, #00c853, #00b0ff);
+    color: #000; border: 1.5px solid #fff; border-radius: 9px; margin-bottom: 5px;
+}
+#autoOptStatus { font-size: 11px; color: #99ddff; text-align: center; margin-bottom: 8px; }
+.preset-row { display: flex; gap: 7px; margin-bottom: 8px; }
+.preset-btn {
+    flex: 1; padding: 6px; font-weight: bold; font-size: 12px;
+    background: #14264d; color: #fff; border: 1.5px solid #3a6099; border-radius: 8px;
+}
+.preset-btn.active { border-color: #00ff88; background: #0d3a36; }
+.opt-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.opt-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255, 255, 255, 0.06); padding: 6px 10px; border-radius: 7px; font-size: 12px;
+}
+.opt-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #00ff88; }
+.opt-row select {
+    background: #0d1b36; color: #fff; border: 1px solid #4488cc;
+    border-radius: 5px; padding: 3px 6px; font-size: 11px;
+}
+
+/* РУЛЕТКА */
+#wheelBody { display: flex; gap: 12px; align-items: center; justify-content: center; overflow-y: auto; flex-wrap: wrap; }
+#wheelWrap { position: relative; width: 170px; height: 170px; flex-shrink: 0; }
+#wheelPointer {
+    position: absolute; top: -7px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0; border-left: 9px solid transparent;
+    border-right: 9px solid transparent; border-top: 18px solid #ff2244;
+    z-index: 5; filter: drop-shadow(0 0 4px #fff);
+}
+#wheelCanvas { width: 170px; height: 170px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 16px #aa33ff; }
+#wheelSide { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 190px; }
+.spin-btn { padding: 7px 10px; font-size: 12px; font-weight: 900; border-radius: 8px; border: 1.5px solid #fff; color: #fff; }
+#btnSpinFree { background: linear-gradient(180deg, #ff33cc, #9900aa); }
+#btnSpinCoins { background: linear-gradient(180deg, #ffaa00, #bb6600); }
+#oddsBox {
+    background: rgba(0, 0, 0, 0.45); border: 1px solid #335588; border-radius: 7px;
+    padding: 5px 7px; font-size: 10px; line-height: 1.4; max-height: 95px; overflow-y: auto;
+}
+#wheelResult {
+    display: none; padding: 6px; background: rgba(0, 255, 100, 0.15);
+    border: 1.5px solid #00ff88; border-radius: 8px; text-align: center; font-weight: bold; font-size: 12px;
+}
+#wheelResult img { width: 34px; height: 34px; object-fit: contain; display: block; margin: 0 auto 3px; }
+
+/* PLAYTIME */
+.pt-desc { margin: 0 0 8px 0; font-size: 12px; color: #bbd; }
+.pt-box {
+    background: rgba(255, 255, 255, 0.06); border: 1px solid #336699;
+    border-radius: 10px; padding: 11px; display: flex; flex-direction: column; gap: 8px;
+}
+.pt-row-top { display: flex; justify-content: space-between; font-size: 13px; }
+.pt-bar-bg { width: 100%; height: 11px; background: rgba(0, 0, 0, 0.6); border: 1px solid #00e5ff; border-radius: 6px; overflow: hidden; }
+#ptProgressFill { width: 0%; height: 100%; background: linear-gradient(90deg, #00aaff, #00ff88); transition: width 0.3s linear; }
+.pt-claim-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.pt-claim { padding: 7px 14px; border-radius: 8px; border: none; font-weight: 900; background: #00ee66; color: #000; font-size: 12px; }
+.pt-claim:disabled { background: #2c3e55; color: #778899; }
+
+/* КОНЕЦ КАТКИ */
+#gameOver {
+    display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #fff; font-size: 20px; font-weight: bold; text-align: center; pointer-events: auto;
+    background: rgba(5, 10, 25, 0.94); padding: 16px 26px; border-radius: 14px;
+    border: 2px solid #ff3344; z-index: 250; box-shadow: 0 0 24px rgba(255, 0, 50, 0.5);
+}
+#rewardMsg { font-size: 13px; color: #ffd700; display: block; margin-top: 6px; white-space: pre-line; }
+#btnBackLobby {
+    padding: 9px 22px; margin-top: 12px; font-size: 14px; font-weight: bold;
+    border-radius: 8px; background: linear-gradient(180deg, #00aaff, #0055cc);
+    color: #fff; border: 1.5px solid #fff;
+}
+/* ПАНЕЛЬ ТЕСТОВОЙ ЛОКАЦИИ */
+#testPanel {
+    display: none; position: absolute; top: 6px; left: 8px; right: 92px;
+    flex-wrap: wrap; gap: 4px; align-items: center; pointer-events: none; z-index: 30;
+}
+#testPanel select, #testPanel button {
+    pointer-events: auto; background: rgba(10, 20, 44, 0.88);
+    color: #eef6ff; border: 1.5px solid #00ccff; border-radius: 6px;
+    padding: 3px 6px; font-size: 10px; font-weight: 800;
+}
+#testPanel button.active { background: #007744; border-color: #00ff88; color: #fff; }
+#btnTestExit { background: rgba(155, 15, 30, 0.9) !important; border-color: #ff4455 !important; }
