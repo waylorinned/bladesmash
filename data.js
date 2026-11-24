@@ -1,7 +1,7 @@
 const ABILITIES = [
     { id: 'dash', name: 'Dash', img: 'Dash.webp', price: 0, wheelOnly: false, passive: false, cd: 8, desc: 'Рывок вперёд по направлению взгляда (КД 8с)' },
     { id: 'invis', name: 'Invisibility', img: 'inviz.webp', price: 100, wheelOnly: false, passive: false, cd: 15, desc: 'Невидимость 3с. В 1 на 1 возвращает мяч врагу' },
-    { id: 'platform', name: 'Platform', img: 'platform.webp', price: 150, wheelOnly: false, passive: false, cd: 1, desc: 'Подъёмная платформа под ногами' },
+    { id: 'platform', name: 'Platform', img: 'Platform.webp', price: 150, wheelOnly: false, passive: false, cd: 1, desc: 'Подъёмная платформа под ногами' },
     { id: 'super_jump', name: 'Super Jump', img: 'Super_Jump.webp', price: 350, wheelOnly: false, passive: false, cd: 12, desc: 'Высокий прыжок вверх (КД 12с)' },
     { id: 'quad_jump', name: 'Quad Jump', img: 'Quad_Jump.webp', price: 450, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: 4 прыжка подряд' },
     { id: 'luck', name: 'Luck', img: 'Luck_image.webp', price: 1000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: 25% шанс отвести мяч (отключён в 1 на 1)' },
