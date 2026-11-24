@@ -13,7 +13,7 @@ const ABILITIES = [
     { id: 'forcefield', name: 'Forcefield', img: 'Forcefield.webp', price: 2000, wheelOnly: false, passive: false, cd: 30, desc: 'Щит авто-отбива 7с (в 1 на 1 — 3с, КД 30с)' },
     { id: 'reaper', name: 'Reaper', img: 'Reaper.webp', price: 3000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: за каждое убийство (до x5) ускоряет бег и удар' },
     { id: 'raging_deflect', name: 'Raging Deflect', img: 'Raging_Deflect.webp', price: 4000, wheelOnly: false, passive: false, cd: 30, desc: 'Усиленный отбив x2 скорость и оглушение на 1.5с (КД 30с)' },
-    { id: 'rapture', name: 'Rapture', img: 'rapture.webp', price: 0, wheelOnly: true, passive: false, cd: 30, desc: 'Апперкот с камнями, дугой вверх и x3 скоростью (2%)' }
+    { id: 'rapture', name: 'Rapture', img: 'Rapture.webp', price: 0, wheelOnly: true, passive: false, cd: 30, desc: 'Апперкот с камнями, дугой вверх и x3 скоростью (2%)' }
 ];
 
 const SWORDS = [
@@ -29,7 +29,7 @@ const WHEEL_ITEMS = [
     { id: 'instant_30m', label: 'Быстрый прокрут 30м (+1 спин)', short: 'Быстр. 30м', weight: 27, color: '#00b894', type: 'instant', val: 30 },
     { id: 'x2_15m', label: 'x2 монеты на 15 мин', short: 'x2 15м', weight: 24, color: '#f39c12', type: 'x2', val: 15 },
     { id: 'coins_500', label: '500 монет', short: '500', weight: 17.9, color: '#e67e22', type: 'coins', val: 500 },
-    { id: 'ab_rapture', label: 'Rapture', short: 'Rapture', weight: 2, color: '#e74c3c', type: 'ability', val: 'rapture', img: 'rapture.webp' },
+    { id: 'ab_rapture', label: 'Rapture', short: 'Rapture', weight: 2, color: '#e74c3c', type: 'ability', val: 'rapture', img: 'Rapture.webp' },
     { id: 'sw_shard', label: 'Nebula Shard', short: 'N.Shard', weight: 1, color: '#6c5ce7', type: 'sword', val: 'nebula_shard', img: 'NebulaSh.webp' },
     { id: 'sw_staff', label: 'Nebula Staff', short: 'N.Staff', weight: 0.25, color: '#a55eea', type: 'sword', val: 'nebula_staff', img: 'NebulaSt.webp' },
     { id: 'sw_dual', label: 'Dual Nebula Staff', short: 'DUAL', weight: 0.1, color: '#00d2d3', type: 'sword', val: 'dual_nebula_staff', img: 'DualNebualSt.webp' }
