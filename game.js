@@ -3029,3 +3029,28 @@ window.addEventListener('resize', () => {
 });
 
 animate();
+document.getElementById('btnExportSave').addEventListener('click', () => {
+    const raw = localStorage.getItem('bladeBallV1') || JSON.stringify(gameData);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(raw).then(() => showToast('Сохранение скопировано')).catch(() => prompt('Скопируй код сохранения:', raw));
+    } else {
+        prompt('Скопируй код сохранения:', raw);
+    }
+});
+
+document.getElementById('btnImportSave').addEventListener('click', () => {
+    const raw = prompt('Вставь код сохранения:');
+    if (!raw) return;
+    try {
+        const parsed = JSON.parse(raw.trim());
+        if (typeof parsed.coins === 'number') {
+            localStorage.setItem('bladeBallV1', JSON.stringify(parsed));
+            location.reload();
+        } else {
+            showToast('Неверный формат сохранения');
+        }
+    } catch (e) {
+        showToast('Ошибка чтения сохранения');
+    }
+});
+
