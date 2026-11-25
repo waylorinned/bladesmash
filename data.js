@@ -1,6 +1,6 @@
 const ABILITIES = [
     { id: 'dash', name: 'Dash', img: 'Dash.webp', price: 0, wheelOnly: false, passive: false, cd: 8, desc: 'Рывок вперёд по направлению взгляда (КД 8с)' },
-    { id: 'invis', name: 'Invisibility', img: 'inviz.webp', price: 100, wheelOnly: false, passive: false, cd: 15, desc: 'Невидимость 3с. В 1 на 1 возвращает мяч врагу' },
+    { id: 'invis', name: 'Invisibility', img: 'inviz.webp', price: 100, wheelOnly: false, passive: false, cd: 15, desc: 'Невидимость 3с (отключена в 1 на 1)' },
     { id: 'platform', name: 'Platform', img: 'Platform.webp', price: 150, wheelOnly: false, passive: false, cd: 1, desc: 'Подъёмная платформа под ногами' },
     { id: 'super_jump', name: 'Super Jump', img: 'Super_Jump.webp', price: 350, wheelOnly: false, passive: false, cd: 12, desc: 'Высокий прыжок вверх (КД 12с)' },
     { id: 'quad_jump', name: 'Quad Jump', img: 'Quad_Jump.webp', price: 450, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: 4 прыжка подряд' },
@@ -19,11 +19,20 @@ const ABILITIES = [
     { id: 'misfortune', name: 'Misfortune', img: 'Misfortune.webp', price: 4000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: 30% шанс перехватить мяч на себя (отключён в 1 на 1)' },
     { id: 'ninja_dash', name: 'Ninja Dash', img: 'Ninja_Dash.webp', price: 5000, wheelOnly: false, passive: false, cd: 16, desc: 'Рывок к мячу и авто-отбитие даже на КД блока (КД 16с)' },
     { id: 'telekinesis', name: 'Telekinesis', img: 'Telekinesis_.webp', price: 5000, wheelOnly: false, passive: false, cd: 40, desc: 'Останавливает мяч в воздухе и пускает с x1.75 скоростью (КД 40с)' },
-    { id: 'pull', name: 'Pull', img: 'Pull.webp', price: 5000, wheelOnly: false, passive: false, cd: 30, desc: 'Перенаправляет таргет мяча на вас (КД 30с)' },
+    { id: 'pull', name: 'Pull', img: 'Pull.webp', price: 5000, wheelOnly: false, passive: false, cd: 30, desc: 'Перенаправляет таргет мяча на вас (бейт чужого блока, КД 30с)' },
     { id: 'virus', name: 'Virus', img: 'Virus.webp', price: 5000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: заражает отбившего в вас мяч (-35% скорость на 5с)' },
     { id: 'aerodynamic_slash', name: 'Aerodynamic Slash', img: 'Aerodynamic_Slash.webp', price: 7000, wheelOnly: false, passive: false, cd: 35, desc: 'Закручивает мяч вихрем в небо и обрушивает на цель (КД 35с)' },
     { id: 'golden_ball', name: 'Golden Ball', img: 'Golden_Ball.webp', price: 7000, wheelOnly: false, passive: true, cd: 0, desc: 'Пассив: после килла мяч не респавнится, а золотой летит дальше (+15%)' },
-    { id: 'rapture', name: 'Rapture', img: 'Rapture.webp', price: 0, wheelOnly: true, passive: false, cd: 30, desc: 'Апперкот с камнями, дугой вверх и x3 скоростью (2%)' }
+    { id: 'gales_edge', name: "Gale's Edge", img: 'Gales_Edge.webp', price: 7500, wheelOnly: false, passive: false, cd: 20, charges: 2, desc: '2 заряда: стена ветра толкает мяч вперёд, сбивая тайминг (КД 20с)' },
+    { id: 'hell_hook', name: 'Hell Hook', img: 'Hell_Hook.webp', price: 7500, wheelOnly: false, passive: false, cd: 25, desc: 'Тёмная цепь притягивает врага в прицеле вплотную для клэша (КД 25с)' },
+    { id: 'qi_charge', name: 'Qi Charge', img: 'Qi_Charge.webp', price: 8000, wheelOnly: false, passive: false, cd: 25, desc: 'Энергия Ци на 7с: ускоряет бег и резко усиливает отбивы (КД 25с)' },
+    { id: 'pulse', name: 'Pulse', img: 'Pulse.webp', price: 10000, wheelOnly: false, passive: false, cd: 30, desc: 'Красный импульс отключает абилки и сбивает щиты врагов вокруг на 5с (КД 30с)' },
+    { id: 'blade_trap', name: 'Blade Trap', img: 'Blade_Trap.webp', price: 10000, wheelOnly: false, passive: false, cd: 25, desc: 'Ловушка на полу: ловит пролетающий мяч и выстреливает с ускорением (КД 25с)' },
+    { id: 'chieftains_totem', name: "Chieftain's Totem", img: 'Chieftains_Totem.webp', price: 10000, wheelOnly: false, passive: false, cd: 20, desc: 'Тотем на 10с: в золотой зоне вы быстрее и бьёте сильнее, враги медленнее' },
+    { id: 'flash_counter', name: 'Flash Counter', img: 'Flash_Counter.webp', price: 12500, wheelOnly: false, passive: false, cd: 35, desc: 'Контр-отбив: телепорт за спину врага, заморозка цели и мощный возврат (КД 35с)' },
+    { id: 'absolute_confidence', name: 'Absolute Confidence', img: 'Absolute_Confidence.webp', price: 15000, wheelOnly: false, passive: false, cd: 35, desc: 'Алая аура 6с: каждый отбитый мяч на арене гарантированно летит в вас (КД 35с)' },
+    { id: 'guardian_angel', name: 'Guardian Angel', img: 'Guardian_Angel.webp', price: 20000, wheelOnly: false, passive: true, cd: 40, desc: 'Пассив: спасает от смертельного удара золотым щитом и отбивает мяч (КД 40с)' },
+    { id: 'rapture', name: 'Rapture', img: 'Rapture.webp', price: 0, wheelOnly: true, passive: false, cd: 30, desc: 'Апперкот с камнями, дугой вверх и x3 скоростью (Рулетка 2%)' }
 ];
 
 const SWORDS = [
@@ -80,8 +89,16 @@ const SKIN_PRESETS = {
     ]
 };
 
-const META_ABILITIES = ['rapture', 'invis', 'raging_deflect', 'forcefield', 'freeze', 'reaper', 'telekinesis', 'ninja_dash', 'pull', 'aerodynamic_slash', 'golden_ball'];
-const NORMAL_ABILITIES = ['dash', 'platform', 'super_jump', 'quad_jump', 'luck', 'thunder_dash', 'shadow_step', 'wind_cloak', 'blink', 'swap', 'martyrdom', 'scopophobia', 'misfortune', 'virus'];
+const META_ABILITIES = [
+    'rapture', 'invis', 'raging_deflect', 'forcefield', 'freeze', 'reaper',
+    'telekinesis', 'ninja_dash', 'pull', 'aerodynamic_slash', 'golden_ball',
+    'flash_counter', 'guardian_angel', 'pulse', 'hell_hook', 'absolute_confidence', 'qi_charge'
+];
+const NORMAL_ABILITIES = [
+    'dash', 'platform', 'super_jump', 'quad_jump', 'luck', 'thunder_dash',
+    'shadow_step', 'wind_cloak', 'blink', 'swap', 'martyrdom', 'scopophobia',
+    'misfortune', 'virus', 'gales_edge', 'blade_trap', 'chieftains_totem'
+];
 
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
@@ -101,9 +118,9 @@ function generateBotProfile(existingNames, forcedTier = null) {
     let tier = forcedTier;
     if (!tier) {
         const r = Math.random();
-        if (r < 0.14) tier = 'sweat';
-        else if (r < 0.36) tier = 'pro';
-        else if (r < 0.70) tier = 'mid';
+        if (r < 0.16) tier = 'sweat';
+        else if (r < 0.42) tier = 'pro';
+        else if (r < 0.76) tier = 'mid';
         else tier = 'noob';
     }
 
@@ -112,17 +129,17 @@ function generateBotProfile(existingNames, forcedTier = null) {
         kills = randInt(7500, 28500);
         wins = Math.round(kills * (0.08 + Math.random() * 0.06));
         sword = Math.random() < 0.45 ? 'dual_nebula_staff' : 'nebula_staff';
-        metaChance = 0.75;
+        metaChance = 0.78;
     } else if (tier === 'pro') {
         kills = randInt(1600, 6900);
         wins = Math.round(kills * (0.07 + Math.random() * 0.05));
         sword = Math.random() < 0.35 ? 'nebula_staff' : (Math.random() < 0.5 ? 'nebula_shard' : 'prisma_blade');
-        metaChance = 0.52;
+        metaChance = 0.55;
     } else if (tier === 'mid') {
         kills = randInt(220, 1450);
         wins = Math.round(kills * (0.06 + Math.random() * 0.05));
         sword = Math.random() < 0.3 ? 'prisma_blade' : 'default';
-        metaChance = 0.30;
+        metaChance = 0.32;
     } else {
         kills = randInt(8, 190);
         wins = Math.max(0, Math.round(kills * (0.04 + Math.random() * 0.05)));
@@ -185,7 +202,11 @@ const defaultGfx = {
     particles: true,
     stars: true,
     showFps: false,
-    pixelRatio: 1
+    pixelRatio: 1,
+    camSens: 1.0,
+    autoShiftLock: false,
+    musicVol: 0.4,
+    sfxVol: 0.95
 };
 let gfxSettings = Object.assign({}, defaultGfx, JSON.parse(localStorage.getItem('bladeBallGfx') || '{}'));
 function saveGfx() { localStorage.setItem('bladeBallGfx', JSON.stringify(gfxSettings)); }
