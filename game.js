@@ -895,7 +895,6 @@ function spawnChieftainTotem(owner, pos) {
 }
 
 function updateWorldAbilityObjects() {
-    // Wind Walls (Gale's Edge)
     for (let i = windWalls.length - 1; i >= 0; i--) {
         const w = windWalls[i];
         w.life--;
@@ -919,7 +918,6 @@ function updateWorldAbilityObjects() {
         }
     }
 
-    // Blade Traps
     for (let i = arenaTraps.length - 1; i >= 0; i--) {
         const tr = arenaTraps[i];
         tr.life--;
@@ -947,7 +945,6 @@ function updateWorldAbilityObjects() {
         }
     }
 
-    // Chieftain's Totems
     for (let i = arenaTotems.length - 1; i >= 0; i--) {
         const tm = arenaTotems[i];
         tm.life--;
@@ -1388,7 +1385,6 @@ class Entity {
         this.isPlatformActive = false;
         this.walkCycle = Math.random() * 10;
 
-        // AI state for pre-fire & tactical spacing
         this.parryDecided = false;
         this.prefireLeadFrames = 9;
         this.currentReactionMs = 200;
@@ -1459,7 +1455,6 @@ class Entity {
         this.windAuraGroup.visible = false;
         this.mesh.add(this.windAuraGroup);
 
-        // Qi Charge white/silver energy aura
         this.qiAuraGroup = new THREE.Group();
         [[-5.0, 4.4, 5.4], [0, 3.8, 4.5]].forEach(([yPos, r1, r2]) => {
             const r = new THREE.Mesh(
@@ -1473,7 +1468,6 @@ class Entity {
         this.qiAuraGroup.visible = false;
         this.mesh.add(this.qiAuraGroup);
 
-        // Absolute Confidence fiery crimson ring
         this.absConfAura = new THREE.Mesh(
             new THREE.RingGeometry(5.6, 7.2, 28),
             new THREE.MeshBasicMaterial({ color: 0xff1133, side: THREE.DoubleSide, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
@@ -1483,7 +1477,6 @@ class Entity {
         this.absConfAura.visible = false;
         this.mesh.add(this.absConfAura);
 
-        // Pulse silence lock indicator
         this.silencedAura = new THREE.Mesh(
             new THREE.TorusGeometry(2.8, 0.2, 6, 16),
             new THREE.MeshBasicMaterial({ color: 0xff2222, blending: THREE.AdditiveBlending })
@@ -1803,7 +1796,6 @@ class Entity {
         if (!ignoreCd && Date.now() < this.abilityReadyAt) return false;
 
         const aliveCount = players.filter(p => p.isAlive).length;
-        // Invisibility is disabled in 1v1 duels
         if (type === 'invis' && gameState === 'playing' && aliveCount <= 2) {
             if (!this.isBot) showStatus('INVISIBILITY ОТКЛЮЧЕН В 1 НА 1', '#ffaa00', 1300);
             return false;
@@ -2281,7 +2273,6 @@ class Entity {
         const aliveList = players.filter(p => p.isAlive);
         document.getElementById('aliveCount').innerText = aliveList.length;
 
-        // Entering 1v1: immediately cancel active Invisibility on remaining players
         if (aliveList.length === 2) {
             let strippedAny = false;
             aliveList.forEach(p => {
@@ -2320,6 +2311,9 @@ class Entity {
             stopAllTouchControls();
             hideStatus();
             hideBlockCdOverlay();
+            updateActionButtonsVisibility();
+            if (platformControlsEl) platformControlsEl.style.display = 'none';
+            if (effectBarContainerEl) effectBarContainerEl.style.display = 'none';
             ball.mesh.visible = false;
             ball.target = null;
             ballGroundRing.visible = false;
@@ -2337,6 +2331,9 @@ class Entity {
             stopAllTouchControls();
             hideStatus();
             hideBlockCdOverlay();
+            updateActionButtonsVisibility();
+            if (platformControlsEl) platformControlsEl.style.display = 'none';
+            if (effectBarContainerEl) effectBarContainerEl.style.display = 'none';
             mainPlayer.setTargetHighlight(false);
             ball.mesh.visible = false;
             ball.target = null;
@@ -2372,7 +2369,6 @@ class Entity {
     }
 
     rollPrefireLead() {
-        // Frames before impact when bot swings block (enables genuine Pull baiting)
         if (this.isTestBot) return 9 + Math.random() * 4;
         if (this.tier === 'sweat') return 7 + Math.random() * 4;
         if (this.tier === 'pro') return 8 + Math.random() * 5;
@@ -2387,7 +2383,7 @@ class Entity {
         others.forEach(e => {
             const d = this.mesh.position.distanceTo(e.mesh.position);
             let s = 40 / (d + 12);
-            if (e.blockCooldown > 6) s += 3.5; // Punish players on block CD
+            if (e.blockCooldown > 6) s += 3.5;
             if (e.stunTimer > 0 || e.scopoTimer > 0 || e.virusTimer > 0) s += 2.2;
             if (s > bestScore) { bestScore = s; best = e; }
         });
@@ -2400,7 +2396,6 @@ class Entity {
         this.updateVerticalPhysics();
         this.updateParryLogic();
 
-        // Test arena bots
         if (this.isTestBot && gameState === 'test') {
             if (testState.botMode === 'dummy') {
                 this.animateWalk(false);
@@ -2450,7 +2445,6 @@ class Entity {
             this.platformMesh.position.set(this.mesh.position.x, this.mesh.position.y - 7, this.mesh.position.z);
         }
 
-        // Lobby idle wandering
         if (gameState === 'lobby') {
             if (this.mesh.position.distanceTo(this.targetWalkPos) < 5 || Math.random() < 0.012) {
                 this.targetWalkPos.set(-28 + Math.random() * 90, this.baseY, LOBBY_Z - 55 + Math.random() * 110);
@@ -2473,8 +2467,6 @@ class Entity {
 
         if (gameState !== 'playing') return;
 
-        // Combat tactical positioning (real Blade Ball spacing & clash pushing)
-        const aliveOthers = players.filter(p => p.isAlive && p !== this && !p.isInvis);
         const aliveCount = players.filter(p => p.isAlive).length;
         const ab = this.ability;
 
@@ -2499,23 +2491,19 @@ class Entity {
             const isDuelAggressive = (this.tier === 'sweat' || this.tier === 'pro') && (aliveCount <= 2 || focusEnemy.blockCooldown > 10);
 
             if (isDuelAggressive) {
-                // Close into clash distance (~20-26 units) and strafe
                 const idealDist = this.tier === 'sweat' ? 20 : 25;
                 if (distEnemy > idealDist + 5) moveVec.addScaledVector(dirToEnemy, 0.85);
                 else if (distEnemy < idealDist - 5) moveVec.addScaledVector(dirToEnemy, -0.5);
                 moveVec.addScaledVector(strafeVec, 0.72);
             } else if (ball.target === this) {
-                // Backpedal slightly + strafe to buy parry reaction window
                 if (distEnemy < 38) moveVec.addScaledVector(dirToEnemy, -0.65);
                 moveVec.addScaledVector(strafeVec, 0.85);
             } else {
-                // Maintain smart mid-range spacing around ~44 units
                 if (distEnemy < 32) moveVec.addScaledVector(dirToEnemy, -0.7);
                 else if (distEnemy > 62) moveVec.addScaledVector(dirToEnemy, 0.65);
                 moveVec.addScaledVector(strafeVec, 0.8);
             }
 
-            // Soft pull away from arena walls
             if (Math.abs(this.mesh.position.x) > 88) moveVec.x -= Math.sign(this.mesh.position.x) * 0.9;
             if (Math.abs(this.mesh.position.z) > 88) moveVec.z -= Math.sign(this.mesh.position.z) * 0.9;
 
@@ -2526,7 +2514,6 @@ class Entity {
                 moving = true;
             }
 
-            // Face target enemy when about to parry, otherwise face movement
             if (ball.target === this) {
                 this.mesh.rotation.y = Math.atan2(dirToEnemy.x, dirToEnemy.z);
             } else if (moving) {
@@ -2537,7 +2524,6 @@ class Entity {
         }
         this.animateWalk(moving);
 
-        // Proactive ability usage
         if (Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && this.silencedTimer <= 0) {
             if (ab === 'invis' && aliveCount > 2 && !this.isInvis && ball.target === this && Math.random() < 0.04) {
                 this.activateAbility();
@@ -2552,7 +2538,6 @@ class Entity {
             } else if (ab === 'absolute_confidence' && aliveCount > 2 && ball.speed > 1.4 && Math.random() < 0.006) {
                 this.activateAbility();
             } else if (ab === 'pull' && ball.target && ball.target !== this && ball.target.parryActiveTimer > 0 && Math.random() < 0.35) {
-                // Smart bot Pull-baits when it sees someone pre-fire!
                 this.activateAbility();
             } else if (ab === 'gales_edge' && ball.target === this && this.mesh.position.distanceTo(ball.mesh.position) < 42 && Math.random() < 0.03) {
                 this.activateAbility();
@@ -2561,7 +2546,6 @@ class Entity {
             }
         }
 
-        // Pre-fire defensive parry & counter-ability logic
         if (ball.target === this && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
             const elapsedSinceSwitch = performance.now() - ball.targetSetTime;
             if (elapsedSinceSwitch < this.currentReactionMs) return;
@@ -2571,13 +2555,11 @@ class Entity {
             const parryRange = 15 + qiBonus + (ball.speed * 2.5);
             const prefireDist = parryRange + (ball.speed * this.prefireLeadFrames);
 
-            // Aim at the best enemy right before swinging so smart targeting sends it there
             if (focusEnemy && this.stunTimer <= 0) {
                 const aim = new THREE.Vector3().subVectors(focusEnemy.mesh.position, this.mesh.position);
                 this.mesh.rotation.y = Math.atan2(aim.x, aim.z);
             }
 
-            // Counter-parry abilities (Rapture, Raging Deflect, Aero Slash, Flash Counter)
             if ((ab === 'rapture' || ab === 'raging_deflect' || ab === 'aerodynamic_slash' || ab === 'flash_counter') &&
                 Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && this.silencedTimer <= 0) {
                 if (distToBall < 22 + ball.speed * 3.2 && !this.parryDecided) {
@@ -2601,7 +2583,6 @@ class Entity {
                 if (this.forcefieldTimer > 0) return;
             }
 
-            // Pre-fire block decision (swings early while ball is approaching)
             if (distToBall < prefireDist && !this.parryDecided && this.forcefieldTimer <= 0) {
                 this.parryDecided = true;
                 let baseAcc = this.tier === 'sweat' ? 0.96 : (this.tier === 'pro' ? 0.92 : (this.tier === 'mid' ? 0.83 : 0.68));
@@ -2612,10 +2593,8 @@ class Entity {
                 }
 
                 if (Math.random() < successChance) {
-                    // Good pre-fire timing: swing immediately so parryActiveTimer covers impact (and is baitable by Pull!)
                     this.tryParry();
                 } else if (Math.random() < 0.55) {
-                    // Bot panicked and swung way too early, burning its block CD
                     this.tryParry();
                 }
             }
@@ -2808,7 +2787,7 @@ const ball = {
         }
     },
 
-        startTelekinesis: function(owner) {
+    startTelekinesis: function(owner) {
         this.unfreeze();
         this.aeroTimer = 0;
         this.curveTimer = 0;
@@ -2826,16 +2805,16 @@ const ball = {
         this.curveTimer = 0;
         this.martyrBall = false;
         this.raptureBoost = true;
-        this.speed = Math.min(Math.max(this.speed * 1.45, this.speed + 1.3), 9.8);
+        this.speed = Math.min(Math.max(this.speed * 1.9, this.speed + 1.8), 9.8);
         this.pickNewTarget(owner);
         const dir = new THREE.Vector3();
-        if (this.target) {
-            dir.subVectors(this.target.mesh.position, owner.mesh.position);
-        } else {
-            getEntityAimVector(owner, dir);
-        }
+        if (this.target) dir.subVectors(this.target.mesh.position, owner.mesh.position);
+        else getEntityAimVector(owner, dir);
+        this.vel.copy(dir).normalize().multiplyScalar(this.speed);
+        this.vel.y = 2.1;
+        this.curveTimer = 28;
         spawnRaptureRocks(owner.mesh.position, dir);
-        spawnShockwave(this.mesh.position, 0xff5500, 2, 20, 0.05, true);
+        spawnShockwave(this.mesh.position, 0xff5500, 2, 22, 0.05, true);
         spawnSparks(this.mesh.position, 0xff6600, 24, 1.4);
         this.updateVisualColor();
     },
@@ -2846,8 +2825,14 @@ const ball = {
         this.curveTimer = 0;
         this.raptureBoost = false;
         this.martyrBall = false;
-        this.speed = Math.min(this.speed + 1.15, 9.6);
+        const prevHitter = this.lastHitBy;
+        this.speed = Math.min(Math.max(this.speed * 1.75, this.speed + 1.3), 9.6);
         this.pickNewTarget(owner);
+        if (prevHitter && prevHitter.isAlive && prevHitter !== owner) {
+            prevHitter.stunTimer = Math.max(prevHitter.stunTimer, 90);
+            spawnLightning(owner.mesh.position, prevHitter.mesh.position.clone(), 0xff2244, 4);
+            if (prevHitter === mainPlayer) showStatus('ВЫ ОГЛУШЕНЫ (RAGING DEFLECT)', '#ff2244', 1400);
+        }
         spawnShockwave(this.mesh.position, 0xff1133, 2, 18, 0.055, true);
         spawnSparks(this.mesh.position, 0xff2244, 22, 1.35);
         this.updateVisualColor();
@@ -2858,9 +2843,9 @@ const ball = {
         this.raptureBoost = false;
         this.curveTimer = 0;
         this.martyrBall = false;
-        this.aeroTimer = 55;
+        this.aeroTimer = 58;
         this.aeroAngle = 0;
-        this.speed = Math.min(this.speed + 0.95, 9.5);
+        this.speed = Math.min(this.speed + 1.0, 9.5);
         this.pickNewTarget(owner);
         spawnShockwave(this.mesh.position, 0xff2255, 2, 18, 0.05, true);
         spawnSparks(this.mesh.position, 0xff4488, 20, 1.3);
@@ -2872,13 +2857,25 @@ const ball = {
         this.aeroTimer = 0;
         this.raptureBoost = false;
         this.martyrBall = false;
-        this.speed = Math.min(this.speed + 1.25, 9.8);
+        this.speed = Math.min(this.speed + 1.35, 9.8);
         const prevHitter = this.lastHitBy;
-        spawnLightning(owner.mesh.position, this.mesh.position.clone(), 0xcc44ff, 4);
-        if (prevHitter && prevHitter.isAlive && prevHitter !== owner && !prevHitter.isInvis) {
-            this.forceTarget(prevHitter, owner);
-        } else {
+        let victim = (prevHitter && prevHitter.isAlive && prevHitter !== owner && !prevHitter.isInvis) ? prevHitter : null;
+        if (!victim) {
             this.pickNewTarget(owner);
+            victim = this.target;
+        } else {
+            this.forceTarget(victim, owner);
+        }
+        if (victim && victim !== owner) {
+            const backDir = new THREE.Vector3(-Math.sin(victim.mesh.rotation.y), 0, -Math.cos(victim.mesh.rotation.y));
+            const oldPos = owner.mesh.position.clone();
+            const tpPos = victim.mesh.position.clone().addScaledVector(backDir, 11);
+            owner.mesh.position.set(tpPos.x, owner.baseY, tpPos.z);
+            owner.clampBounds();
+            victim.stunTimer = Math.max(victim.stunTimer, 50);
+            spawnLightning(oldPos, owner.mesh.position.clone(), 0xcc44ff, 4);
+            spawnIceShatter(victim.mesh.position.clone());
+            if (victim === mainPlayer) showStatus('FLASH COUNTER: ВЫ ЗАМОРОЖЕНЫ', '#cc44ff', 1200);
         }
         spawnShockwave(this.mesh.position, 0xcc44ff, 2, 19, 0.05, true);
         spawnSparks(this.mesh.position, 0xdd66ff, 22, 1.35);
@@ -2915,14 +2912,9 @@ const ball = {
             newTarget.currentReactionMs = newTarget.rollHumanReactionMs(isCloseClash);
             newTarget.prefireLeadFrames = newTarget.rollPrefireLead();
 
-            if (hitter) {
-                const ab = hitter.getCurrentAbility();
-                if (ab === 'virus') {
-                    newTarget.virusTimer = 180;
-                } else if (ab === 'golden_ball' && Math.random() < 0.25) {
-                    this.goldenBall = true;
-                    this.speed = Math.min(this.speed + 0.4, 9.6);
-                }
+            if (hitter && hitter !== newTarget && newTarget.getCurrentAbility() === 'virus') {
+                hitter.virusTimer = 300;
+                if (hitter === mainPlayer) showStatus('VIRUS: СКОРОСТЬ -35% (5с)', '#22ff44', 1400);
             }
         }
         this.updateVisualColor();
@@ -2943,34 +2935,48 @@ const ball = {
             return;
         }
 
-        // Absolute Confidence приоритетно притягивает мяч
+        const aliveCount = players.filter(p => p.isAlive).length;
+
         const confCandidates = candidates.filter(c => c.absConfTimer > 0);
         if (confCandidates.length > 0) {
             this.forceTarget(confCandidates[0], hitter);
             return;
         }
 
-        if (!hitter) {
-            const pick = candidates[Math.floor(Math.random() * candidates.length)];
-            this.forceTarget(pick, null);
-            return;
+        if (aliveCount > 2) {
+            const misf = candidates.filter(c => c.getCurrentAbility() === 'misfortune');
+            if (misf.length > 0 && Math.random() < 0.30) {
+                const chosen = misf[Math.floor(Math.random() * misf.length)];
+                if (chosen === mainPlayer) showStatus('MISFORTUNE: МЯЧ ПЕРЕХВАЧЕН', '#aa44ff', 1000);
+                this.forceTarget(chosen, hitter);
+                return;
+            }
         }
 
-        getEntityAimVector(hitter, _aimDir);
         let best = candidates[0];
-        let bestScore = -999;
+        if (!hitter) {
+            best = candidates[Math.floor(Math.random() * candidates.length)];
+        } else {
+            getEntityAimVector(hitter, _aimDir);
+            let bestScore = -999;
+            candidates.forEach(c => {
+                _toCand.subVectors(c.mesh.position, hitter.mesh.position);
+                _toCand.y = 0;
+                const dist = Math.max(0.1, _toCand.length());
+                const dot = _aimDir.dot(_toCand.divideScalar(dist));
+                const score = dot * 2.4 + (30 / (dist + 14));
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = c;
+                }
+            });
+        }
 
-        candidates.forEach(c => {
-            _toCand.subVectors(c.mesh.position, hitter.mesh.position);
-            _toCand.y = 0;
-            const dist = Math.max(0.1, _toCand.length());
-            const dot = _aimDir.dot(_toCand.divideScalar(dist));
-            const score = dot * 2.4 + (30 / (dist + 14));
-            if (score > bestScore) {
-                bestScore = score;
-                best = c;
-            }
-        });
+        if (aliveCount > 2 && best.getCurrentAbility() === 'luck' && candidates.length > 1 && Math.random() < 0.25) {
+            const others = candidates.filter(c => c !== best);
+            if (best === mainPlayer) showStatus('LUCK: МЯЧ ОТВЕДЁН!', '#00ff88', 1100);
+            best = others[Math.floor(Math.random() * others.length)];
+        }
 
         this.forceTarget(best, hitter);
     },
@@ -2997,7 +3003,6 @@ const ball = {
         ballGroundRing.visible = true;
         ballGroundRing.position.set(this.mesh.position.x, 0.2, this.mesh.position.z);
 
-        // Заморозка (Freeze)
         if (this.frozenTimer > 0) {
             this.frozenTimer--;
             iceShellMesh.rotation.y += 0.04;
@@ -3010,18 +3015,17 @@ const ball = {
             return;
         }
 
-        // Телекинез (Telekinesis)
         if (this.teleTimer > 0) {
             this.teleTimer--;
             teleSphereMesh.rotation.y += 0.09;
             teleSphereMesh.rotation.x += 0.05;
-            this.mesh.position.y += (12 - this.mesh.position.y) * 0.12;
+            this.mesh.position.y += (14 - this.mesh.position.y) * 0.12;
 
             if (this.teleTimer <= 0 || !this.teleOwner || !this.teleOwner.isAlive) {
                 teleSphereMesh.visible = false;
                 const owner = this.teleOwner;
                 this.teleOwner = null;
-                this.speed = Math.min(this.speed + 0.85, 9.6);
+                this.speed = Math.min(Math.max(this.speed * 1.75, this.speed + 0.9), 9.6);
                 this.pickNewTarget(owner && owner.isAlive ? owner : null);
                 spawnShockwave(this.mesh.position, 0xcc44ff, 2, 18, 0.05, true);
                 spawnSparks(this.mesh.position, 0xcc44ff, 20, 1.3);
@@ -3032,14 +3036,13 @@ const ball = {
             return;
         }
 
-        // Ловушка (Blade Trap)
         if (this.trapTimer > 0) {
             this.trapTimer--;
             this.mesh.position.y = 5.5 + Math.sin(performance.now() * 0.03) * 0.6;
             if (this.trapTimer <= 0) {
                 const owner = this.trapOwner;
                 this.trapOwner = null;
-                this.speed = Math.min(this.speed + 0.75, 9.5);
+                this.speed = Math.min(this.speed + 0.85, 9.5);
                 this.pickNewTarget(owner && owner.isAlive ? owner : null);
                 spawnShockwave(this.mesh.position, 0xff1144, 2, 16, 0.05, true);
                 playSynth(660, 220, 0.2, 'sawtooth', 0.28);
@@ -3049,7 +3052,6 @@ const ball = {
             return;
         }
 
-        // Проверка актуальности цели
         const visibleAlive = players.filter(p => p.isAlive && !p.isInvis);
         if (!this.target || !this.target.isAlive || (this.target.isInvis && visibleAlive.length > 0)) {
             this.pickNewTarget(this.lastHitBy);
@@ -3065,14 +3067,17 @@ const ball = {
         if (this.curveTimer > 0) {
             this.curveTimer--;
             const desiredVel = dirToGoal.multiplyScalar(this.speed);
-            this.vel.lerp(desiredVel, 0.14);
+            this.vel.lerp(desiredVel, this.raptureBoost ? 0.1 : 0.14);
             this.mesh.position.add(this.vel);
         } else if (this.aeroTimer > 0) {
             this.aeroTimer--;
             this.aeroAngle += 0.26;
             const side = new THREE.Vector3(-dirToGoal.z, 0, dirToGoal.x);
-            const curveStrength = Math.min(1, dist / 28) * 1.15;
-            const moveDir = dirToGoal.clone().addScaledVector(side, Math.sin(this.aeroAngle) * curveStrength).normalize();
+            const curveStrength = Math.min(1, dist / 26) * 1.15;
+            const lift = this.aeroTimer > 28 ? 0.7 : -0.35;
+            const moveDir = dirToGoal.clone().addScaledVector(side, Math.sin(this.aeroAngle) * curveStrength);
+            moveDir.y += lift;
+            moveDir.normalize();
             this.vel.copy(moveDir).multiplyScalar(this.speed);
             this.mesh.position.add(this.vel);
         } else {
@@ -3088,48 +3093,70 @@ const ball = {
         updateBallTrail(this.mesh.position, this.currentColorHex);
         updateBallScreenIndicator();
 
-        // Попадание по цели
         const hitDist = this.mesh.position.distanceTo(goal);
         if (hitDist < 4.5 && this.selfBounceGrace <= 0) {
             const victim = this.target;
+            const hitter = this.lastHitBy;
 
-            // Absolute Confidence авто-отбитие при столкновении
-            if (victim.absConfTimer > 0) {
-                victim.absConfTimer = 0;
+            const ignoreCd = (!victim.isBot && gameState === 'test' && testState.noCd);
+            if (victim.getCurrentAbility() === 'guardian_angel' && (ignoreCd || Date.now() >= victim.abilityReadyAt)) {
+                victim.abilityReadyAt = Date.now() + (ignoreCd ? 250 : 40000);
                 playClashSound(this.speed + 1.0);
-                victim.applyStandardParryBoost();
-                this.speed = Math.min(this.speed + 0.55, 9.6);
-                victim.triggerParryImpactVFX(this.mesh.position.clone(), 0xff1133);
+                playSynth(520, 1080, 0.35, 'triangle', 0.35);
+                spawnShockwave(victim.mesh.position.clone(), 0xffd700, 2, 22, 0.045, true);
+                spawnSparks(victim.mesh.position.clone(), 0xffee55, 24, 1.3);
+                if (victim === mainPlayer) {
+                    addShake(1.1);
+                    showStatus('GUARDIAN ANGEL СПАС ВАС!', '#ffd700', 1600);
+                }
+                this.speed = Math.min(this.speed + 0.4, 9.6);
+                this.raptureBoost = false;
+                this.aeroTimer = 0;
+                this.martyrBall = false;
                 this.pickNewTarget(victim);
                 return;
             }
 
             victim.setTargetHighlight(false);
-            const wasGolden = this.goldenBall;
-            const hitter = this.lastHitBy;
-
-            if (wasGolden && hitter === mainPlayer && victim.isBot && gameState === 'playing') {
-                const bonus = isX2Active() ? 30 : 15;
-                gameData.coins += bonus;
-                saveGame();
-                showStatus(`GOLDEN BALL: +${bonus} МОНЕТ`, '#ffd700', 1400);
-            }
-
-            // Эффект пассивки Martyr при гибели
-            if (victim.getCurrentAbility() === 'martyr') {
-                players.forEach(p => {
-                    if (p.isAlive && p !== victim && p.mesh.position.distanceTo(victim.mesh.position) < 42) {
-                        p.martyrSlowTimer = 210;
-                    }
-                });
-                spawnShockwave(victim.mesh.position.clone(), 0xaa22ff, 2, 34, 0.04, true);
-            }
+            const deathPos = victim.mesh.position.clone();
+            const isMartyr = victim.getCurrentAbility() === 'martyrdom';
+            const isGoldenKill = !!(hitter && hitter.isAlive && hitter !== victim && hitter.getCurrentAbility() === 'golden_ball');
 
             victim.die();
 
-            if (isCombatState()) {
-                this.spawn(gameState === 'test' ? TEST_Z : 0);
+            if (!isCombatState()) return;
+
+            if (isMartyr && hitter && hitter.isAlive && hitter !== victim) {
+                players.forEach(p => {
+                    if (p.isAlive && p !== victim && p.mesh.position.distanceTo(deathPos) < 44) {
+                        p.martyrSlowTimer = 180;
+                    }
+                });
+                spawnShockwave(deathPos, 0xaa22ff, 2, 34, 0.04, true);
+                this.resetAllSpecials();
+                this.martyrBall = true;
+                this.speed = Math.min(Math.max(this.speed, 1.8) * 1.15, 9.6);
+                this.mesh.position.set(deathPos.x, 7, deathPos.z);
+                this.vel.set(0, 0, 0);
+                this.forceTarget(hitter, victim);
+                showStatus(`MARTYRDOM: ТЁМНЫЙ МЯЧ В ${hitter.name}`, '#bb44ff', 1400);
+                return;
             }
+
+            if (isGoldenKill) {
+                this.resetAllSpecials();
+                this.goldenBall = true;
+                this.speed = Math.min(this.speed * 1.15, 9.6);
+                this.mesh.position.set(deathPos.x, 7, deathPos.z);
+                this.vel.set(0, 0, 0);
+                spawnShockwave(deathPos, 0xffd700, 2, 22, 0.05, true);
+                spawnSparks(deathPos, 0xffd700, 20, 1.2);
+                this.pickNewTarget(hitter);
+                if (hitter === mainPlayer) showStatus('GOLDEN BALL: МЯЧ ПРОДОЛЖАЕТ ПОЛЁТ (+15%)', '#ffd700', 1400);
+                return;
+            }
+
+            this.spawn(gameState === 'test' ? TEST_Z : 0);
         }
     }
 };
@@ -3151,12 +3178,23 @@ const training = {
     streak: 0,
     ballMesh: trainingBallMesh,
 
+    updateHud: function() {
+        const hud = document.getElementById('trainingHud');
+        const hitsEl = document.getElementById('trainHits');
+        const spdEl = document.getElementById('trainSpd');
+        if (hud) hud.style.display = this.active ? 'block' : 'none';
+        if (hitsEl) hitsEl.innerText = this.streak;
+        if (spdEl) spdEl.innerText = (this.speed / 0.75).toFixed(1);
+    },
+
     reset: function() {
         this.active = false;
         this.goingToPlayer = true;
         this.speed = 0.75;
         this.streak = 0;
         this.ballMesh.visible = false;
+        this.updateHud();
+        updateActionButtonsVisibility();
     },
 
     onPlayerParry: function() {
@@ -3166,7 +3204,7 @@ const training = {
         playClashSound(this.speed);
         spawnShockwave(this.ballMesh.position.clone(), 0x00ffaa, 1.5, 11, 0.07, true);
         spawnSparks(this.ballMesh.position.clone(), 0x00ffaa, 12, 0.9);
-        showStatus(`СЕРИЯ ОТБИТИЙ: ${this.streak}`, '#00ffaa', 1100);
+        this.updateHud();
     },
 
     update: function() {
@@ -3190,6 +3228,8 @@ const training = {
             this.streak = 0;
             this.ballMesh.position.copy(TRAIN_TARGET_POS);
             this.ballMesh.visible = true;
+            this.updateHud();
+            updateActionButtonsVisibility();
             showStatus('ЗОНА ТРЕНИРОВКИ', '#00ffaa', 1200);
         }
 
@@ -3199,15 +3239,14 @@ const training = {
 
         if (dist <= this.speed + 2.4) {
             if (this.goingToPlayer) {
-                // Игрок пропустил мяч
                 spawnSparks(this.ballMesh.position.clone(), 0xff3344, 14, 1.0);
                 playSynth(180, 80, 0.2, 'sawtooth', 0.25);
                 showStatus(`ПРОМАХ! СЕРИЯ: ${this.streak}`, '#ff4455', 1200);
                 this.streak = 0;
                 this.speed = 0.75;
                 this.ballMesh.position.copy(TRAIN_TARGET_POS);
+                this.updateHud();
             } else {
-                // Отскок от мишени обратно к игроку
                 this.goingToPlayer = true;
                 spawnShockwave(TRAIN_TARGET_POS, 0x00ffaa, 1.5, 10, 0.08, false, 0);
                 playSynth(420, 620, 0.1, 'sine', 0.18);
@@ -3217,6 +3256,80 @@ const training = {
         }
     }
 };
+
+// ==========================================
+// UI HELPERS & ACTION VISIBILITY
+// ==========================================
+const btnBlockEl = document.getElementById('btnBlock');
+const btnAbilityEl = document.getElementById('btnAbility');
+const btnJumpEl = document.getElementById('btnJump');
+const btnInteractWheelEl = document.getElementById('btnInteractWheel');
+const platformControlsEl = document.getElementById('platformControls');
+const effectBarContainerEl = document.getElementById('effectBarContainer');
+const effectBarEl = document.getElementById('effectBar');
+const leftHudEl = document.getElementById('leftHud');
+const testPanelEl = document.getElementById('testPanel');
+const gameStateTextEl = document.getElementById('gameStateText');
+const aliveCountTextEl = document.getElementById('aliveCountText');
+const fpsBadgeEl = document.getElementById('fpsBadge');
+
+function updateActionButtonsVisibility() {
+    const combat = isCombatState();
+    if (btnBlockEl) btnBlockEl.style.display = (combat || (gameState === 'lobby' && training.active)) ? 'flex' : 'none';
+    if (btnAbilityEl) btnAbilityEl.style.display = combat ? 'flex' : 'none';
+    if (leftHudEl) leftHudEl.style.display = gameState === 'test' ? 'none' : 'flex';
+    if (testPanelEl) testPanelEl.style.display = gameState === 'test' ? 'flex' : 'none';
+}
+
+function closeAllModals() {
+    ['abilityMenu', 'settingsModal', 'wheelModal', 'playtimeModal'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+}
+
+function openModal(id) {
+    closeAllModals();
+    stopAllTouchControls();
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'flex';
+}
+
+function bindGameAction(el, fn) {
+    if (!el) return;
+    let lastTouch = 0;
+    el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        lastTouch = Date.now();
+        fn();
+    }, { passive: false });
+    el.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        if (Date.now() - lastTouch < 500) return;
+        fn();
+    });
+}
+
+bindGameAction(btnBlockEl, () => { if (mainPlayer) mainPlayer.tryParry(); });
+bindGameAction(btnAbilityEl, () => { if (mainPlayer) mainPlayer.activateAbility(); });
+bindGameAction(btnJumpEl, () => { if (mainPlayer) mainPlayer.jump(); });
+
+let platUpHeld = false;
+let platDownHeld = false;
+function bindHoldBtn(el, setter) {
+    if (!el) return;
+    const onDown = (e) => { e.preventDefault(); e.stopPropagation(); setter(true); };
+    const onUp = (e) => { e.stopPropagation(); setter(false); };
+    el.addEventListener('touchstart', onDown, { passive: false });
+    el.addEventListener('touchend', onUp);
+    el.addEventListener('touchcancel', onUp);
+    el.addEventListener('mousedown', onDown);
+    el.addEventListener('mouseup', onUp);
+    el.addEventListener('mouseleave', onUp);
+}
+bindHoldBtn(document.getElementById('btnUp'), v => { platUpHeld = v; });
+bindHoldBtn(document.getElementById('btnDown'), v => { platDownHeld = v; });
 
 // ==========================================
 // TEST ARENA & MATCH / LOBBY LIFECYCLE
@@ -3234,6 +3347,29 @@ function clearAllEntities() {
 function clearTestRespawnTimers() {
     testState.respawnTimers.forEach(id => clearTimeout(id));
     testState.respawnTimers.length = 0;
+}
+
+function populateTestSelects() {
+    const abSel = document.getElementById('testAbSelect');
+    const swSel = document.getElementById('testSwSelect');
+    if (abSel && abSel.options.length === 0) {
+        ABILITIES.forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = a.id;
+            opt.textContent = a.name;
+            abSel.appendChild(opt);
+        });
+    }
+    if (swSel && swSel.options.length === 0) {
+        SWORDS.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.name;
+            swSel.appendChild(opt);
+        });
+    }
+    if (abSel) abSel.value = testState.ability;
+    if (swSel) swSel.value = testState.sword;
 }
 
 function spawnTestBot(slot = 0) {
@@ -3256,6 +3392,7 @@ function enterTestArena() {
     clearInterval(lobbyTimerHandle);
     lobbyTimerHandle = null;
     clearTestRespawnTimers();
+    closeAllModals();
     training.reset();
     clearAllEntities();
 
@@ -3263,6 +3400,7 @@ function enterTestArena() {
     testState.kills = 0;
     testState.ability = gameData.equippedAbility;
     testState.sword = gameData.equippedSword;
+    populateTestSelects();
 
     mainPlayer = new Entity({
         name: 'Player',
@@ -3271,26 +3409,25 @@ function enterTestArena() {
     mainPlayer.mesh.position.set(0, mainPlayer.baseY, TEST_Z + 44);
     mainPlayer.equipSword(testState.sword);
     snapCamera(0, 1.08);
+    if (gfxSettings.autoShiftLock) setShiftLock(true);
 
     spawnTestBot(0);
     spawnTestBot(1);
     ball.spawn(TEST_Z);
 
-    const testHud = document.getElementById('testArenaHud');
-    if (testHud) testHud.style.display = 'flex';
-    const lobbyHud = document.getElementById('lobbyHud');
-    if (lobbyHud) lobbyHud.style.display = 'none';
-    const matchHud = document.getElementById('matchHud');
-    if (matchHud) matchHud.style.display = 'none';
-
+    if (gameStateTextEl) {
+        gameStateTextEl.style.display = 'block';
+        gameStateTextEl.innerText = 'ТЕСТ-АРЕНА';
+    }
+    if (aliveCountTextEl) aliveCountTextEl.style.display = 'none';
+    if (btnInteractWheelEl) btnInteractWheelEl.style.display = 'none';
+    updateActionButtonsVisibility();
     updateAbilityHudIcon();
     showToast('СЕКРЕТНАЯ ТЕСТ-АРЕНА');
 }
 
 function exitTestArena() {
     clearTestRespawnTimers();
-    const testHud = document.getElementById('testArenaHud');
-    if (testHud) testHud.style.display = 'none';
     returnToLobby();
 }
 
@@ -3318,8 +3455,11 @@ function spawnLobbyEntities() {
 function startLobbyCountdown() {
     clearInterval(lobbyTimerHandle);
     lobbyTime = 15;
-    const timerEl = document.getElementById('lobbyTimer');
-    if (timerEl) timerEl.innerText = lobbyTime;
+    if (gameStateTextEl) {
+        gameStateTextEl.style.display = 'block';
+        gameStateTextEl.innerHTML = 'ЛОББИ: <span id="lobbyTimer">15</span>с';
+    }
+    if (aliveCountTextEl) aliveCountTextEl.style.display = 'none';
 
     lobbyTimerHandle = setInterval(() => {
         if (gameState !== 'lobby') {
@@ -3328,6 +3468,7 @@ function startLobbyCountdown() {
             return;
         }
         lobbyTime--;
+        const timerEl = document.getElementById('lobbyTimer');
         if (timerEl) timerEl.innerText = Math.max(0, lobbyTime);
         if (lobbyTime <= 0) {
             clearInterval(lobbyTimerHandle);
@@ -3338,6 +3479,7 @@ function startLobbyCountdown() {
 }
 
 function startMatch() {
+    closeAllModals();
     training.reset();
     clearWorldAbilityObjects();
     gameState = 'playing';
@@ -3372,16 +3514,17 @@ function startMatch() {
         mainPlayer.equipSword(gameData.equippedSword);
         snapCamera(mainPlayer.mesh.rotation.y + Math.PI, 1.08);
     }
+    if (gfxSettings.autoShiftLock) setShiftLock(true);
 
     const aliveEl = document.getElementById('aliveCount');
     if (aliveEl) aliveEl.innerText = players.length;
-    const lobbyHud = document.getElementById('lobbyHud');
-    if (lobbyHud) lobbyHud.style.display = 'none';
-    const matchHud = document.getElementById('matchHud');
-    if (matchHud) matchHud.style.display = 'flex';
+    if (gameStateTextEl) gameStateTextEl.style.display = 'none';
+    if (aliveCountTextEl) aliveCountTextEl.style.display = 'block';
+    if (btnInteractWheelEl) btnInteractWheelEl.style.display = 'none';
     const overEl = document.getElementById('gameOver');
     if (overEl) overEl.style.display = 'none';
 
+    updateActionButtonsVisibility();
     updateAbilityHudIcon();
     ball.spawn(0);
     showStatus('РАУНД НАЧАЛСЯ!', '#00eeff', 1500);
@@ -3390,8 +3533,14 @@ function startMatch() {
 function returnToLobby() {
     clearTestRespawnTimers();
     stopAllTouchControls();
+    closeAllModals();
     hideStatus();
     hideBlockCdOverlay();
+    platUpHeld = false;
+    platDownHeld = false;
+    if (platformControlsEl) platformControlsEl.style.display = 'none';
+    if (effectBarContainerEl) effectBarContainerEl.style.display = 'none';
+
     ball.mesh.visible = false;
     ball.target = null;
     ballGroundRing.visible = false;
@@ -3399,19 +3548,621 @@ function returnToLobby() {
     dangerVignetteEl.classList.remove('active');
     ballArrowEl.style.display = 'none';
 
+    if (gfxSettings.autoShiftLock) setShiftLock(false);
+
+    if (gameState === 'gameover' && typeof rotateServerPlayers === 'function') {
+        rotateServerPlayers();
+    }
+
     gameState = 'lobby';
     const overEl = document.getElementById('gameOver');
     if (overEl) overEl.style.display = 'none';
-    const matchHud = document.getElementById('matchHud');
-    if (matchHud) matchHud.style.display = 'none';
-    const testHud = document.getElementById('testArenaHud');
-    if (testHud) testHud.style.display = 'none';
-    const lobbyHud = document.getElementById('lobbyHud');
-    if (lobbyHud) lobbyHud.style.display = 'flex';
 
+    updateActionButtonsVisibility();
     spawnLobbyEntities();
     startLobbyCountdown();
 }
+
+// ==========================================
+// TEST PANEL EVENTS
+// ==========================================
+document.getElementById('testAbSelect')?.addEventListener('change', (e) => {
+    testState.ability = e.target.value;
+    if (mainPlayer) {
+        mainPlayer.abilityReadyAt = 0;
+        mainPlayer.blinkCharges = 3;
+        mainPlayer.galeCharges = 2;
+        mainPlayer.reaperStacks = 0;
+        mainPlayer.stripActiveBuffs();
+        mainPlayer.jumpsLeft = mainPlayer.getMaxJumps();
+    }
+    updateAbilityHudIcon();
+});
+
+document.getElementById('testSwSelect')?.addEventListener('change', (e) => {
+    testState.sword = e.target.value;
+    if (mainPlayer) mainPlayer.equipSword(testState.sword);
+});
+
+document.getElementById('btnTestNoCd')?.addEventListener('click', (e) => {
+    testState.noCd = !testState.noCd;
+    e.target.innerText = testState.noCd ? 'КД: ВЫКЛ' : 'КД: ВКЛ';
+    e.target.classList.toggle('active', testState.noCd);
+    if (testState.noCd && mainPlayer) mainPlayer.abilityReadyAt = 0;
+});
+
+document.getElementById('btnTestBotMode')?.addEventListener('click', (e) => {
+    testState.botMode = testState.botMode === 'parry' ? 'dummy' : 'parry';
+    e.target.innerText = testState.botMode === 'parry' ? 'БОТ: ОТБИВ' : 'БОТ: МАНИКЕН';
+    e.target.classList.toggle('active', testState.botMode === 'dummy');
+});
+
+document.getElementById('btnTestSpeed')?.addEventListener('click', () => {
+    if (gameState === 'test' && ball.mesh.visible) {
+        ball.speed = Math.min(9.4, ball.speed + 0.8);
+        showStatus(`СКОРОСТЬ МЯЧА: ${ball.speed.toFixed(1)}`, '#00eeff', 1000);
+    }
+});
+
+document.getElementById('btnTestExit')?.addEventListener('click', () => {
+    exitTestArena();
+});
+
+// ==========================================
+// SHOP MODAL (ABILITIES & SWORDS)
+// ==========================================
+function renderShop() {
+    const abGrid = document.getElementById('abilityGrid');
+    const swGrid = document.getElementById('swordGrid');
+    if (!abGrid || !swGrid) return;
+
+    abGrid.innerHTML = '';
+    ABILITIES.forEach(ab => {
+        const owned = gameData.unlockedAbilities.includes(ab.id);
+        const equipped = gameData.equippedAbility === ab.id;
+        const card = document.createElement('div');
+        card.className = 'item-card' + (equipped ? ' selected' : '') + (ab.wheelOnly ? ' wheel-only' : '');
+
+        let priceText = `${ab.price.toLocaleString('en-US')} мон.`;
+        let priceClass = 'item-price';
+        if (equipped) { priceText = 'ВЫБРАНО'; priceClass += ' owned'; }
+        else if (owned) { priceText = 'ЭКИПИРОВАТЬ'; priceClass += ' owned'; }
+        else if (ab.wheelOnly) { priceText = 'РУЛЕТКА'; priceClass += ' locked-wheel'; }
+
+        card.innerHTML = `
+            <img src="${ab.img}" alt="${ab.name}" onerror="this.style.visibility='hidden'">
+            <div class="item-name">${ab.name}</div>
+            <div class="item-sub">${ab.desc}</div>
+            <div class="${priceClass}">${priceText}</div>
+        `;
+        card.addEventListener('click', () => {
+            if (owned) {
+                gameData.equippedAbility = ab.id;
+                if (gameState === 'test') {
+                    testState.ability = ab.id;
+                    const sel = document.getElementById('testAbSelect');
+                    if (sel) sel.value = ab.id;
+                }
+                if (mainPlayer) {
+                    mainPlayer.ability = ab.id;
+                    mainPlayer.abilityReadyAt = 0;
+                    mainPlayer.jumpsLeft = mainPlayer.getMaxJumps();
+                }
+                saveGame();
+                renderShop();
+                showToast(`Экипировано: ${ab.name}`);
+            } else if (ab.wheelOnly) {
+                showToast('Выпадает только в Колесе Фортуны!');
+            } else if (gameData.coins >= ab.price) {
+                gameData.coins -= ab.price;
+                gameData.unlockedAbilities.push(ab.id);
+                gameData.equippedAbility = ab.id;
+                if (mainPlayer) mainPlayer.ability = ab.id;
+                playSynth(440, 880, 0.25, 'triangle', 0.28);
+                saveGame();
+                renderShop();
+                showToast(`Куплено: ${ab.name}!`);
+            } else {
+                showToast(`Не хватает ${(ab.price - gameData.coins).toLocaleString('en-US')} монет`);
+            }
+        });
+        abGrid.appendChild(card);
+    });
+
+    swGrid.innerHTML = '';
+    SWORDS.forEach(sw => {
+        const owned = gameData.unlockedSwords.includes(sw.id);
+        const equipped = gameData.equippedSword === sw.id;
+        const card = document.createElement('div');
+        card.className = 'item-card' + (equipped ? ' selected' : '') + (sw.wheelOnly ? ' wheel-only' : '');
+
+        let priceText = `${sw.price.toLocaleString('en-US')} мон.`;
+        let priceClass = 'item-price';
+        if (equipped) { priceText = 'ВЫБРАНО'; priceClass += ' owned'; }
+        else if (owned) { priceText = 'ЭКИПИРОВАТЬ'; priceClass += ' owned'; }
+        else if (sw.wheelOnly) { priceText = 'РУЛЕТКА'; priceClass += ' locked-wheel'; }
+
+        const imgHtml = sw.img
+            ? `<img src="${sw.img}" alt="${sw.name}" onerror="this.style.visibility='hidden'">`
+            : `<div style="width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(0,0,0,0.4);border-radius:7px;">⚔️</div>`;
+
+        card.innerHTML = `
+            ${imgHtml}
+            <div class="item-name">${sw.name}</div>
+            <div class="item-sub">${sw.desc}</div>
+            <div class="${priceClass}">${priceText}</div>
+        `;
+        card.addEventListener('click', () => {
+            if (owned) {
+                gameData.equippedSword = sw.id;
+                if (gameState === 'test') {
+                    testState.sword = sw.id;
+                    const sel = document.getElementById('testSwSelect');
+                    if (sel) sel.value = sw.id;
+                }
+                if (mainPlayer) mainPlayer.equipSword(sw.id);
+                saveGame();
+                renderShop();
+                showToast(`Меч выбран: ${sw.name}`);
+            } else if (sw.wheelOnly) {
+                showToast('Выпадает только в Колесе Фортуны!');
+            } else if (gameData.coins >= sw.price) {
+                gameData.coins -= sw.price;
+                gameData.unlockedSwords.push(sw.id);
+                gameData.equippedSword = sw.id;
+                if (mainPlayer) mainPlayer.equipSword(sw.id);
+                playSynth(480, 960, 0.25, 'triangle', 0.28);
+                saveGame();
+                renderShop();
+                showToast(`Меч куплен: ${sw.name}!`);
+            } else {
+                showToast(`Не хватает ${(sw.price - gameData.coins).toLocaleString('en-US')} монет`);
+            }
+        });
+        swGrid.appendChild(card);
+    });
+}
+
+document.getElementById('btnOpenMenu')?.addEventListener('click', () => {
+    renderShop();
+    openModal('abilityMenu');
+});
+document.getElementById('btnCloseMenu')?.addEventListener('click', closeAllModals);
+
+document.getElementById('tabAbilities')?.addEventListener('click', () => {
+    document.getElementById('tabAbilities').classList.add('active');
+    document.getElementById('tabSwords').classList.remove('active');
+    document.getElementById('abilityGrid').style.display = 'grid';
+    document.getElementById('swordGrid').style.display = 'none';
+});
+document.getElementById('tabSwords')?.addEventListener('click', () => {
+    document.getElementById('tabSwords').classList.add('active');
+    document.getElementById('tabAbilities').classList.remove('active');
+    document.getElementById('swordGrid').style.display = 'grid';
+    document.getElementById('abilityGrid').style.display = 'none';
+});
+
+// ==========================================
+// SETTINGS MODAL (GFX, CONTROLS, SAVE)
+// ==========================================
+function applyGfxSettings() {
+    const pr = Math.min(window.devicePixelRatio || 1, Number(gfxSettings.pixelRatio) || 1);
+    renderer.setPixelRatio(pr);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+    skyDome.visible = !!gfxSettings.stars;
+    starField.visible = !!gfxSettings.stars;
+    if (fpsBadgeEl) fpsBadgeEl.style.display = gfxSettings.showFps ? 'block' : 'none';
+    applyMusicVolume();
+    syncSettingsUI();
+}
+
+function syncSettingsUI() {
+    const setCheck = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
+    setCheck('optBloom', gfxSettings.bloom);
+    setCheck('optParticles', gfxSettings.particles);
+    setCheck('optStars', gfxSettings.stars);
+    setCheck('optFpsShow', gfxSettings.showFps);
+    setCheck('optAutoLock', gfxSettings.autoShiftLock);
+
+    const resEl = document.getElementById('optRes');
+    if (resEl) resEl.value = String(gfxSettings.pixelRatio || 1);
+
+    const sensEl = document.getElementById('optCamSens');
+    const sensVal = document.getElementById('camSensVal');
+    if (sensEl) sensEl.value = gfxSettings.camSens;
+    if (sensVal) sensVal.innerText = `${Number(gfxSettings.camSens).toFixed(1)}x`;
+
+    const musEl = document.getElementById('optMusicVol');
+    const musVal = document.getElementById('musicVolVal');
+    if (musEl) musEl.value = gfxSettings.musicVol;
+    if (musVal) musVal.innerText = `${Math.round(gfxSettings.musicVol * 100)}%`;
+
+    const sfxEl = document.getElementById('optSfxVol');
+    const sfxVal = document.getElementById('sfxVolVal');
+    if (sfxEl) sfxEl.value = gfxSettings.sfxVol;
+    if (sfxVal) sfxVal.innerText = `${Math.round(gfxSettings.sfxVol * 100)}%`;
+
+    ['presetUltra', 'presetMed', 'presetFps'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const target = id === 'presetUltra' ? 'ultra' : (id === 'presetMed' ? 'med' : 'fps');
+        el.classList.toggle('active', gfxSettings.preset === target);
+    });
+}
+
+function applyPreset(name) {
+    gfxSettings.preset = name;
+    if (name === 'ultra') {
+        gfxSettings.bloom = true; gfxSettings.particles = true; gfxSettings.stars = true; gfxSettings.pixelRatio = 1.5;
+    } else if (name === 'med') {
+        gfxSettings.bloom = true; gfxSettings.particles = true; gfxSettings.stars = true; gfxSettings.pixelRatio = 1;
+    } else {
+        gfxSettings.bloom = false; gfxSettings.particles = false; gfxSettings.stars = false; gfxSettings.pixelRatio = 0.75;
+    }
+    saveGfx();
+    applyGfxSettings();
+}
+
+document.getElementById('btnOpenSettings')?.addEventListener('click', () => {
+    syncSettingsUI();
+    updateSaveStatsInfo();
+    openModal('settingsModal');
+});
+document.getElementById('btnCloseSettings')?.addEventListener('click', closeAllModals);
+
+function switchSettingsTab(tab) {
+    const map = { gfx: ['btnSetTabGfx', 'setTabGfx'], ctrl: ['btnSetTabCtrl', 'setTabCtrl'], save: ['btnSetTabSave', 'setTabSave'] };
+    Object.keys(map).forEach(k => {
+        const [btnId, bodyId] = map[k];
+        document.getElementById(btnId)?.classList.toggle('active', k === tab);
+        const body = document.getElementById(bodyId);
+        if (body) body.style.display = k === tab ? 'flex' : 'none';
+    });
+}
+document.getElementById('btnSetTabGfx')?.addEventListener('click', () => switchSettingsTab('gfx'));
+document.getElementById('btnSetTabCtrl')?.addEventListener('click', () => switchSettingsTab('ctrl'));
+document.getElementById('btnSetTabSave')?.addEventListener('click', () => {
+    updateSaveStatsInfo();
+    switchSettingsTab('save');
+});
+
+document.getElementById('presetUltra')?.addEventListener('click', () => applyPreset('ultra'));
+document.getElementById('presetMed')?.addEventListener('click', () => applyPreset('med'));
+document.getElementById('presetFps')?.addEventListener('click', () => applyPreset('fps'));
+
+document.getElementById('btnAutoOpt')?.addEventListener('click', () => {
+    const status = document.getElementById('autoOptStatus');
+    if (status) status.innerText = 'Замер FPS (1 сек)...';
+    let frames = 0;
+    const t0 = performance.now();
+    const probe = () => {
+        frames++;
+        if (performance.now() - t0 < 1000) {
+            requestAnimationFrame(probe);
+        } else {
+            if (frames >= 55) {
+                applyPreset('ultra');
+                if (status) status.innerText = `~${frames} FPS — выбран пресет УЛЬТРА`;
+            } else if (frames >= 36) {
+                applyPreset('med');
+                if (status) status.innerText = `~${frames} FPS — выбран пресет НОРМ`;
+            } else {
+                applyPreset('fps');
+                if (status) status.innerText = `~${frames} FPS — выбран пресет ФПС+`;
+            }
+        }
+    };
+    requestAnimationFrame(probe);
+});
+
+document.getElementById('optBloom')?.addEventListener('change', (e) => { gfxSettings.bloom = e.target.checked; saveGfx(); applyGfxSettings(); });
+document.getElementById('optParticles')?.addEventListener('change', (e) => { gfxSettings.particles = e.target.checked; saveGfx(); applyGfxSettings(); });
+document.getElementById('optStars')?.addEventListener('change', (e) => { gfxSettings.stars = e.target.checked; saveGfx(); applyGfxSettings(); });
+document.getElementById('optFpsShow')?.addEventListener('change', (e) => { gfxSettings.showFps = e.target.checked; saveGfx(); applyGfxSettings(); });
+document.getElementById('optRes')?.addEventListener('change', (e) => { gfxSettings.pixelRatio = Number(e.target.value); saveGfx(); applyGfxSettings(); });
+document.getElementById('optAutoLock')?.addEventListener('change', (e) => { gfxSettings.autoShiftLock = e.target.checked; saveGfx(); });
+
+document.getElementById('optCamSens')?.addEventListener('input', (e) => {
+    gfxSettings.camSens = Number(e.target.value);
+    const lbl = document.getElementById('camSensVal');
+    if (lbl) lbl.innerText = `${gfxSettings.camSens.toFixed(1)}x`;
+    saveGfx();
+});
+document.getElementById('optMusicVol')?.addEventListener('input', (e) => {
+    gfxSettings.musicVol = Number(e.target.value);
+    const lbl = document.getElementById('musicVolVal');
+    if (lbl) lbl.innerText = `${Math.round(gfxSettings.musicVol * 100)}%`;
+    applyMusicVolume();
+    saveGfx();
+});
+document.getElementById('optSfxVol')?.addEventListener('input', (e) => {
+    gfxSettings.sfxVol = Number(e.target.value);
+    const lbl = document.getElementById('sfxVolVal');
+    if (lbl) lbl.innerText = `${Math.round(gfxSettings.sfxVol * 100)}%`;
+    saveGfx();
+});
+
+document.getElementById('btnExportSave')?.addEventListener('click', () => {
+    try {
+        const code = btoa(unescape(encodeURIComponent(JSON.stringify(gameData))));
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(() => {
+                showToast('Код сейва скопирован в буфер!');
+            }).catch(() => {
+                window.prompt('Скопируйте ваш код сохранения:', code);
+            });
+        } else {
+            window.prompt('Скопируйте ваш код сохранения:', code);
+        }
+    } catch (e) {
+        showToast('Ошибка экспорта сейва');
+    }
+});
+
+document.getElementById('btnImportSave')?.addEventListener('click', () => {
+    const code = window.prompt('Вставьте код сохранения:');
+    if (!code) return;
+    try {
+        const parsed = JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
+        if (!parsed || typeof parsed.coins !== 'number') throw new Error('bad');
+        gameData = Object.assign({}, defaultSave, parsed);
+        saveGame();
+        if (mainPlayer) {
+            mainPlayer.ability = gameData.equippedAbility;
+            mainPlayer.equipSword(gameData.equippedSword);
+        }
+        renderShop();
+        updatePlaytimeUI();
+        showToast('Сохранение успешно загружено!');
+    } catch (e) {
+        showToast('Неверный код сохранения!');
+    }
+});
+
+// ==========================================
+// WHEEL OF FORTUNE
+// ==========================================
+let wheelAngle = 0;
+let wheelSpinning = false;
+
+function drawWheel(angle) {
+    const canvas = document.getElementById('wheelCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const r = cx - 4;
+    const slice = (Math.PI * 2) / WHEEL_ITEMS.length;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    WHEEL_ITEMS.forEach((item, i) => {
+        const start = angle + i * slice;
+        const end = start + slice;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, start, end);
+        ctx.closePath();
+        ctx.fillStyle = item.color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(start + slice / 2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 3;
+        ctx.fillText(item.short, r - 12, 4);
+        ctx.restore();
+    });
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+    ctx.fillStyle = '#0c1328';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+}
+
+function rollWheelItemIndex() {
+    const total = WHEEL_ITEMS.reduce((s, it) => s + it.weight, 0);
+    let r = Math.random() * total;
+    for (let i = 0; i < WHEEL_ITEMS.length; i++) {
+        r -= WHEEL_ITEMS[i].weight;
+        if (r <= 0) return i;
+    }
+    return 0;
+}
+
+function grantWheelPrize(item) {
+    const resBox = document.getElementById('wheelResult');
+    let msg = `Выпало: ${item.label}!`;
+
+    if (item.type === 'coins') {
+        gameData.coins += item.val;
+    } else if (item.type === 'instant') {
+        gameData.instantSpinUntil = Math.max(Date.now(), gameData.instantSpinUntil) + item.val * 60000;
+        gameData.spins += 1;
+    } else if (item.type === 'x2') {
+        gameData.x2CoinsUntil = Math.max(Date.now(), gameData.x2CoinsUntil) + item.val * 60000;
+    } else if (item.type === 'ability') {
+        if (gameData.unlockedAbilities.includes(item.val)) {
+            gameData.coins += 40;
+            msg = `Дубликат ${item.label}: +40 монет`;
+        } else {
+            gameData.unlockedAbilities.push(item.val);
+            msg = `НОВАЯ АБИЛКА: ${item.label}!`;
+        }
+    } else if (item.type === 'sword') {
+        if (gameData.unlockedSwords.includes(item.val)) {
+            gameData.coins += 40;
+            msg = `Дубликат ${item.label}: +40 монет`;
+        } else {
+            gameData.unlockedSwords.push(item.val);
+            msg = `НОВЫЙ МЕЧ: ${item.label}!`;
+        }
+    }
+
+    saveGame();
+    updateBuffsHud();
+    playSynth(520, 1040, 0.3, 'triangle', 0.3);
+
+    if (resBox) {
+        resBox.style.display = 'block';
+        resBox.innerHTML = (item.img ? `<img src="${item.img}" alt="">` : '') + msg;
+    }
+}
+
+function startWheelSpin(useCoins) {
+    if (wheelSpinning) return;
+    if (gameData.dailySpinDate !== todayStr()) {
+        gameData.dailySpinDate = todayStr();
+        gameData.dailyCoinSpinsUsed = 0;
+    }
+
+    if (useCoins) {
+        if (gameData.dailyCoinSpinsUsed >= 3) {
+            showToast('Лимит 3 прокрута за монеты на сегодня исчерпан');
+            return;
+        }
+        if (gameData.coins < 3000) {
+            showToast('Нужно 3,000 монет!');
+            return;
+        }
+        gameData.coins -= 3000;
+        gameData.dailyCoinSpinsUsed++;
+    } else {
+        if (gameData.spins <= 0) {
+            showToast('Нет бесплатных спинов!');
+            return;
+        }
+        gameData.spins--;
+    }
+    saveGame();
+
+    const winIdx = rollWheelItemIndex();
+    const winItem = WHEEL_ITEMS[winIdx];
+    const slice = (Math.PI * 2) / WHEEL_ITEMS.length;
+    const jitter = (Math.random() - 0.5) * slice * 0.65;
+    const targetMod = -Math.PI / 2 - (winIdx + 0.5) * slice + jitter;
+    const currentMod = wheelAngle % (Math.PI * 2);
+    let delta = targetMod - currentMod;
+    while (delta < 0) delta += Math.PI * 2;
+    const totalRot = delta + Math.PI * 2 * (isInstantSpinActive() ? 1 : 5);
+
+    const startAngle = wheelAngle;
+    const dur = isInstantSpinActive() ? 220 : 3200;
+    const t0 = performance.now();
+    wheelSpinning = true;
+    const resBox = document.getElementById('wheelResult');
+    if (resBox) resBox.style.display = 'none';
+
+    const tick = (now) => {
+        const p = Math.min(1, (now - t0) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        wheelAngle = startAngle + totalRot * eased;
+        drawWheel(wheelAngle);
+        if (p < 1) {
+            requestAnimationFrame(tick);
+        } else {
+            wheelSpinning = false;
+            grantWheelPrize(winItem);
+        }
+    };
+    requestAnimationFrame(tick);
+}
+
+btnInteractWheelEl?.addEventListener('click', () => {
+    drawWheel(wheelAngle);
+    openModal('wheelModal');
+});
+document.getElementById('btnCloseWheel')?.addEventListener('click', closeAllModals);
+document.getElementById('btnSpinFree')?.addEventListener('click', () => startWheelSpin(false));
+document.getElementById('btnSpinCoins')?.addEventListener('click', () => startWheelSpin(true));
+
+// ==========================================
+// PLAYTIME REWARD & BUFFS HUD
+// ==========================================
+function formatMMSS(sec) {
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+}
+
+function updatePlaytimeUI() {
+    const rem = Math.max(0, 600 - gameData.playtimeSeconds);
+    const str = formatMMSS(rem);
+    const pct = Math.min(100, (gameData.playtimeSeconds / 600) * 100);
+
+    const txt = document.getElementById('sessionTimerTxt');
+    const modalTime = document.getElementById('ptModalTime');
+    const fill = document.getElementById('ptProgressFill');
+    const pend = document.getElementById('ptPendingCount');
+    const btnClaim = document.getElementById('btnClaimPlaytime');
+    const btnPt = document.getElementById('btnPlaytime');
+
+    if (txt) txt.innerText = gameData.pendingPlaytimeSpins > 0 ? `+${gameData.pendingPlaytimeSpins} СПИН` : str;
+    if (modalTime) modalTime.innerText = str;
+    if (fill) fill.style.width = `${pct}%`;
+    if (pend) pend.innerText = gameData.pendingPlaytimeSpins;
+    if (btnClaim) btnClaim.disabled = gameData.pendingPlaytimeSpins <= 0;
+    if (btnPt) btnPt.classList.toggle('ready', gameData.pendingPlaytimeSpins > 0);
+}
+
+function updateBuffsHud() {
+    const row = document.getElementById('buffsRow');
+    if (!row) return;
+    const now = Date.now();
+    let html = '';
+    if (gameData.x2CoinsUntil > now) {
+        html += `<div class="buff-badge">x2 Монеты ${formatMMSS((gameData.x2CoinsUntil - now) / 1000)}</div>`;
+    }
+    if (gameData.instantSpinUntil > now) {
+        html += `<div class="buff-badge">Быстр. спин ${formatMMSS((gameData.instantSpinUntil - now) / 1000)}</div>`;
+    }
+    row.innerHTML = html;
+}
+
+document.getElementById('btnPlaytime')?.addEventListener('click', () => {
+    updatePlaytimeUI();
+    openModal('playtimeModal');
+});
+document.getElementById('btnClosePlaytime')?.addEventListener('click', closeAllModals);
+document.getElementById('btnClaimPlaytime')?.addEventListener('click', () => {
+    if (gameData.pendingPlaytimeSpins <= 0) return;
+    const amt = gameData.pendingPlaytimeSpins;
+    gameData.spins += amt;
+    gameData.pendingPlaytimeSpins = 0;
+    saveGame();
+    updatePlaytimeUI();
+    playSynth(500, 980, 0.25, 'triangle', 0.3);
+    showToast(`Получено спинов: +${amt}!`);
+});
+
+document.getElementById('btnBackLobby')?.addEventListener('click', () => {
+    returnToLobby();
+});
+
+setInterval(() => {
+    gameData.playtimeSeconds = (gameData.playtimeSeconds || 0) + 1;
+    if (gameData.playtimeSeconds >= 600) {
+        gameData.playtimeSeconds -= 600;
+        gameData.pendingPlaytimeSpins = (gameData.pendingPlaytimeSpins || 0) + 1;
+        saveGame();
+        showToast('Награда за время готова (+1 спин)!');
+    } else if (gameData.playtimeSeconds % 10 === 0) {
+        localStorage.setItem('bladeBallV1', JSON.stringify(gameData));
+    }
+    updatePlaytimeUI();
+    updateBuffsHud();
+}, 1000);
 
 // ==========================================
 // MAIN PLAYER INPUT, CAMERA & GAME LOOP
@@ -3424,6 +4175,31 @@ const _camForward = new THREE.Vector3();
 const _camRight = new THREE.Vector3();
 const _camLookTarget = new THREE.Vector3();
 
+function updateEffectProgressBar() {
+    if (!effectBarContainerEl || !effectBarEl || !mainPlayer || !mainPlayer.isAlive || !isCombatState()) {
+        if (effectBarContainerEl) effectBarContainerEl.style.display = 'none';
+        return;
+    }
+    let ratio = 0;
+    let color = '#00ffff';
+    if (mainPlayer.forcefieldTimer > 0) { ratio = mainPlayer.forcefieldTimer / mainPlayer.forcefieldMax; color = '#ff5522'; }
+    else if (mainPlayer.windTimer > 0) { ratio = mainPlayer.windTimer / 600; color = '#00ffaa'; }
+    else if (mainPlayer.qiTimer > 0) { ratio = mainPlayer.qiTimer / 420; color = '#eef6ff'; }
+    else if (mainPlayer.absConfTimer > 0) { ratio = mainPlayer.absConfTimer / 360; color = '#ff1133'; }
+    else if (mainPlayer.shadowTimer > 0) { ratio = mainPlayer.shadowTimer / 210; color = '#8833ff'; }
+    else if (mainPlayer.isInvis && mainPlayer.invisTimer > 0) { ratio = mainPlayer.invisTimer / 180; color = '#88ccff'; }
+    else if (ball.teleTimer > 0 && ball.teleOwner === mainPlayer) { ratio = ball.teleTimer / 108; color = '#cc44ff'; }
+
+    if (ratio > 0) {
+        effectBarContainerEl.style.display = 'block';
+        effectBarContainerEl.style.borderColor = color;
+        effectBarEl.style.background = color;
+        effectBarEl.style.width = `${Math.max(0, Math.min(100, ratio * 100))}%`;
+    } else {
+        effectBarContainerEl.style.display = 'none';
+    }
+}
+
 function updateMainPlayer() {
     if (!mainPlayer || !mainPlayer.isAlive) return;
 
@@ -3431,9 +4207,12 @@ function updateMainPlayer() {
     mainPlayer.updateVerticalPhysics();
     mainPlayer.updateParryLogic();
 
-    if (mainPlayer.isPlatformActive && isCombatState()) {
-        mainPlayer.mesh.position.y = Math.min(28, mainPlayer.mesh.position.y + 0.8);
-        mainPlayer.platformMesh.position.set(mainPlayer.mesh.position.x, mainPlayer.mesh.position.y - 7, mainPlayer.mesh.position.z);
+    const showPlat = mainPlayer.isPlatformActive && isCombatState();
+    if (platformControlsEl) platformControlsEl.style.display = showPlat ? 'flex' : 'none';
+    if (showPlat) {
+        if (platUpHeld || keysDown['KeyR']) mainPlayer.mesh.position.y = Math.min(48, mainPlayer.mesh.position.y + 0.65);
+        if (platDownHeld || keysDown['KeyC']) mainPlayer.mesh.position.y = Math.max(mainPlayer.baseY, mainPlayer.mesh.position.y - 0.65);
+        mainPlayer.platformMesh.position.set(mainPlayer.mesh.position.x, mainPlayer.mesh.position.y - 6.6, mainPlayer.mesh.position.z);
     }
 
     camera.getWorldDirection(_camForward);
@@ -3474,7 +4253,6 @@ function updateMainPlayer() {
 
     mainPlayer.animateWalk(movingNow);
 
-    // Обновление HUD-оверлеев КД блока и абилки
     const blockOverlay = document.getElementById('blockCdOverlay');
     if (blockOverlay) {
         if (mainPlayer.blockCooldown > 0 && mainPlayer.parryActiveTimer === 0) {
@@ -3496,12 +4274,12 @@ function updateMainPlayer() {
         }
     }
 
-    // Подсказка колеса фортуны в лобби
-    const wheelBtn = document.getElementById('btnWheelPrompt');
-    if (wheelBtn) {
+    if (btnInteractWheelEl) {
         const onWheelPad = gameState === 'lobby' && mainPlayer.mesh.position.distanceTo(WHEEL_PAD_POS) < 16;
-        wheelBtn.style.display = onWheelPad ? 'block' : 'none';
+        btnInteractWheelEl.style.display = onWheelPad ? 'block' : 'none';
     }
+
+    updateEffectProgressBar();
 }
 
 function updateCamera() {
@@ -3551,8 +4329,20 @@ window.addEventListener('resize', () => {
     if (composer) composer.setSize(window.innerWidth, window.innerHeight);
 });
 
+let fpsFrames = 0;
+let fpsLast = performance.now();
+
 function animate() {
     requestAnimationFrame(animate);
+
+    fpsFrames++;
+    const now = performance.now();
+    if (now - fpsLast >= 500) {
+        const fps = Math.round((fpsFrames * 1000) / (now - fpsLast));
+        if (fpsBadgeEl && gfxSettings.showFps) fpsBadgeEl.innerText = `${fps} FPS`;
+        fpsFrames = 0;
+        fpsLast = now;
+    }
 
     updateMainPlayer();
     for (let i = 0; i < players.length; i++) {
@@ -3564,7 +4354,7 @@ function animate() {
     updateVFX();
     updateCamera();
 
-    if (composer && gfxSettings.bloom !== false) {
+    if (composer && gfxSettings.bloom) {
         composer.render();
     } else {
         renderer.render(scene, camera);
@@ -3572,8 +4362,12 @@ function animate() {
 }
 
 // Старт игры
+applyGfxSettings();
 saveGame();
+updatePlaytimeUI();
+updateBuffsHud();
+drawWheel(0);
+updateActionButtonsVisibility();
 spawnLobbyEntities();
 startLobbyCountdown();
 animate();
-
