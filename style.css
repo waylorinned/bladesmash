@@ -10,7 +10,6 @@ body, html {
 #camera-zone { position: absolute; inset: 0; z-index: 2; touch-action: none; }
 #ui { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
 
-/* КРАСНАЯ ВИНЬЕТКА ОПАСНОСТИ (КОГДА МЯЧ ЛЕТИТ НА ТЕБЯ) */
 #dangerVignette {
     position: absolute; inset: 0; z-index: 5; pointer-events: none;
     opacity: 0; transition: opacity 0.12s ease;
@@ -18,7 +17,6 @@ body, html {
 }
 #dangerVignette.active { opacity: 1; }
 
-/* СТРЕЛКА УКАЗАТЕЛЯ МЯЧА ЗА ЭКРАНОМ */
 #ballArrow {
     display: none; position: absolute; z-index: 12; pointer-events: none;
     width: 0; height: 0;
@@ -29,7 +27,22 @@ body, html {
     transform-origin: center center;
 }
 
-/* ВЕРХНЯЯ ПАНЕЛЬ СЛЕВА (КОМПАКТНАЯ) */
+/* ПРИЦЕЛ SHIFT LOCK */
+#crosshair {
+    display: none; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid rgba(0, 238, 255, 0.88);
+    box-shadow: 0 0 8px rgba(0, 238, 255, 0.75);
+    pointer-events: none; z-index: 15;
+}
+#crosshair::after {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 4px; height: 4px; border-radius: 50%;
+    background: #ffffff;
+}
+
 #leftHud {
     position: absolute; top: 6px; left: 8px;
     display: flex; flex-direction: column; gap: 4px; pointer-events: none;
@@ -58,7 +71,6 @@ body, html {
     border-radius: 5px; padding: 1px 6px; font-size: 10px; color: #aef; font-weight: bold;
 }
 
-/* ВЕРХ ЦЕНТР (НЕ ПЕРЕКРЫВАЕТ ЛЕВЫЙ HUD) */
 #topBar {
     position: absolute; top: 6px; left: 56%; transform: translateX(-50%);
     text-align: center; color: #fff; text-shadow: 0 1px 4px #000;
@@ -72,7 +84,6 @@ body, html {
     font-size: 10px; color: #88ffbb; font-weight: bold; white-space: nowrap;
 }
 
-/* КИЛЛ-ФИД (ТОНКАЯ КОМПАКТНАЯ ПОЛОСКА СВЕРХУ, НЕ МЕШАЕТ ОБЗОРУ) */
 #killFeed {
     display: none; position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
     text-align: center; pointer-events: none; z-index: 40;
@@ -87,7 +98,6 @@ body, html {
 #killLine1 { color: #fff; font-size: 12px; font-weight: 800; text-shadow: 0 0 6px #ff0022; margin-right: 8px; }
 #killLine2 { color: #ffd700; font-size: 12px; font-weight: 900; text-shadow: 0 0 8px #ffaa00; }
 
-/* СТАТУСЫ И УВЕДОМЛЕНИЯ (СНИЗУ, ВНЕ ЦЕНТРА ЭКРАНА) */
 #statusBanner {
     display: none; position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
     background: rgba(15, 10, 25, 0.82); border: 1.5px solid #ffaa00; border-radius: 7px;
@@ -101,7 +111,6 @@ body, html {
     z-index: 60; white-space: nowrap;
 }
 
-/* ПРАВЫЙ ВЕРХ (КОМПАКТНЫЕ КНОПКИ) */
 #topRightBtns {
     position: absolute; top: 6px; right: 8px;
     display: flex; gap: 5px; pointer-events: none;
@@ -121,10 +130,9 @@ body, html {
     box-shadow: 0 0 14px rgba(255, 50, 200, 0.6);
 }
 
-/* БОЕВЫЕ КНОПКИ СПРАВА (ЭРГОНОМИЧНАЯ ДУГА ДЛЯ ТЕЛЕФОНА) */
 #right-actions {
     position: absolute; right: 12px; bottom: 12px;
-    width: 144px; height: 118px; pointer-events: none;
+    width: 148px; height: 122px; pointer-events: none;
 }
 .action-btn {
     pointer-events: auto; position: absolute;
@@ -153,6 +161,16 @@ body, html {
     box-shadow: 0 0 10px rgba(0, 220, 150, 0.45);
 }
 
+.action-btn.lock-btn {
+    display: flex; right: 62px; bottom: 68px; width: 42px; height: 42px; font-size: 9px;
+    border: 2px solid #7799cc; background: rgba(18, 28, 56, 0.65);
+    color: #ccddee;
+}
+.action-btn.lock-btn.active {
+    border-color: #00eeff; background: rgba(0, 140, 210, 0.78);
+    box-shadow: 0 0 12px rgba(0, 230, 255, 0.75); color: #fff;
+}
+
 #abChargeBadge {
     display: none; position: absolute; top: 2px; right: 6px;
     background: #00ddff; color: #000; font-size: 9px; font-weight: 900;
@@ -164,7 +182,6 @@ body, html {
     justify-content: center; align-items: center;
 }
 
-/* ДЖОЙСТИК (КОМПАКТНЫЙ) */
 #joystick-zone {
     position: absolute; bottom: 14px; left: 16px; width: 92px; height: 92px;
     background: rgba(255, 255, 255, 0.08); border-radius: 50%;
@@ -175,7 +192,6 @@ body, html {
     background: rgba(255, 255, 255, 0.48); border-radius: 50%;
 }
 
-/* ПЛАТФОРМА */
 #platformControls {
     display: none; position: absolute; top: 50%; left: 14px; transform: translateY(-50%);
     pointer-events: auto; flex-direction: column; gap: 8px;
@@ -186,7 +202,6 @@ body, html {
     border-radius: 10px; color: #fff; font-weight: bold;
 }
 
-/* ПОЛОСКА ЭФФЕКТА */
 #effectBarContainer {
     display: none; position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
     width: 170px; height: 8px; background: rgba(0, 0, 0, 0.6);
@@ -194,7 +209,6 @@ body, html {
 }
 #effectBar { width: 100%; height: 100%; background: #00ffff; border-radius: 3px; }
 
-/* МОДАЛЬНЫЕ ОКНА */
 .modal {
     display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     width: 88%; max-width: 680px; max-height: 88%;
@@ -242,14 +256,14 @@ body, html {
 .item-price.owned { color: #00ff88; }
 .item-price.locked-wheel { color: #ff88ff; }
 
-/* НАСТРОЙКИ ГРАФИКИ */
+.set-tab-body { display: flex; flex-direction: column; overflow-y: auto; }
 .auto-opt-btn {
-    width: 100%; padding: 9px; font-size: 13px; font-weight: 900;
+    width: 100%; padding: 8px; font-size: 12px; font-weight: 900;
     background: linear-gradient(90deg, #00c853, #00b0ff);
     color: #000; border: 1.5px solid #fff; border-radius: 9px; margin-bottom: 5px;
 }
-#autoOptStatus { font-size: 11px; color: #99ddff; text-align: center; margin-bottom: 8px; }
-.preset-row { display: flex; gap: 7px; margin-bottom: 8px; }
+#autoOptStatus { font-size: 11px; color: #99ddff; text-align: center; margin-bottom: 7px; }
+.preset-row { display: flex; gap: 7px; margin-bottom: 7px; }
 .preset-btn {
     flex: 1; padding: 6px; font-weight: bold; font-size: 12px;
     background: #14264d; color: #fff; border: 1.5px solid #3a6099; border-radius: 8px;
@@ -257,16 +271,24 @@ body, html {
 .preset-btn.active { border-color: #00ff88; background: #0d3a36; }
 .opt-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
 .opt-row {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
     background: rgba(255, 255, 255, 0.06); padding: 6px 10px; border-radius: 7px; font-size: 12px;
 }
 .opt-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #00ff88; }
+.opt-row input[type="range"] { width: 130px; accent-color: #00ccff; }
 .opt-row select {
     background: #0d1b36; color: #fff; border: 1px solid #4488cc;
     border-radius: 5px; padding: 3px 6px; font-size: 11px;
 }
 
-/* РУЛЕТКА */
+.save-box {
+    display: flex; flex-direction: column; gap: 8px;
+    background: rgba(255, 255, 255, 0.05); border: 1px solid #2c4e82;
+    border-radius: 10px; padding: 10px;
+}
+#saveStatsInfo { font-size: 12px; font-weight: 800; color: #00eeff; text-align: center; }
+.save-hint { font-size: 11px; color: #aac0dd; text-align: center; line-height: 1.35; }
+
 #wheelBody { display: flex; gap: 12px; align-items: center; justify-content: center; overflow-y: auto; flex-wrap: wrap; }
 #wheelWrap { position: relative; width: 170px; height: 170px; flex-shrink: 0; }
 #wheelPointer {
@@ -290,7 +312,6 @@ body, html {
 }
 #wheelResult img { width: 34px; height: 34px; object-fit: contain; display: block; margin: 0 auto 3px; }
 
-/* PLAYTIME */
 .pt-desc { margin: 0 0 8px 0; font-size: 12px; color: #bbd; }
 .pt-box {
     background: rgba(255, 255, 255, 0.06); border: 1px solid #336699;
@@ -303,7 +324,6 @@ body, html {
 .pt-claim { padding: 7px 14px; border-radius: 8px; border: none; font-weight: 900; background: #00ee66; color: #000; font-size: 12px; }
 .pt-claim:disabled { background: #2c3e55; color: #778899; }
 
-/* КОНЕЦ КАТКИ */
 #gameOver {
     display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
     color: #fff; font-size: 20px; font-weight: bold; text-align: center; pointer-events: auto;
@@ -316,9 +336,9 @@ body, html {
     border-radius: 8px; background: linear-gradient(180deg, #00aaff, #0055cc);
     color: #fff; border: 1.5px solid #fff;
 }
-/* ПАНЕЛЬ ТЕСТОВОЙ ЛОКАЦИИ */
+
 #testPanel {
-    display: none; position: absolute; top: 6px; left: 8px; right: 92px;
+    display: none; position: absolute; top: 6px; left: 8px; right: 98px;
     flex-wrap: wrap; gap: 4px; align-items: center; pointer-events: none; z-index: 30;
 }
 #testPanel select, #testPanel button {
