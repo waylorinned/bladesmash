@@ -26,6 +26,7 @@
     <div id="camera-zone"></div>
     <div id="dangerVignette"></div>
     <div id="ballArrow"></div>
+    <div id="crosshair"></div>
 
     <div id="ui">
         <div id="leftHud">
@@ -62,7 +63,7 @@
         <div id="toastMsg"></div>
 
         <div id="topRightBtns">
-            <button id="btnOpenSettings">ГРАФИКА</button>
+            <button id="btnOpenSettings">НАСТРОЙКИ</button>
             <button id="btnOpenMenu">МАГАЗИН</button>
         </div>
 
@@ -74,7 +75,7 @@
                 <button class="close-x" id="btnCloseMenu">✕</button>
             </div>
             <div class="tabs">
-                <button class="tab-btn active" id="tabAbilities">АБИЛКИ (15)</button>
+                <button class="tab-btn active" id="tabAbilities">АБИЛКИ (34)</button>
                 <button class="tab-btn" id="tabSwords">МЕЧИ (5)</button>
             </div>
             <div id="abilityGrid" class="item-grid"></div>
@@ -83,34 +84,69 @@
 
         <div id="settingsModal" class="modal">
             <div class="modal-header">
-                <h2>НАСТРОЙКИ ГРАФИКИ</h2>
+                <h2>НАСТРОЙКИ</h2>
                 <button class="close-x" id="btnCloseSettings">✕</button>
             </div>
-            <button id="btnAutoOpt" class="auto-opt-btn">АВТО-ОПТИМИЗАЦИЯ</button>
-            <div id="autoOptStatus">Автоматический подбор настроек под устройство</div>
-            <div class="preset-row">
-                <button class="preset-btn" id="presetUltra">УЛЬТРА</button>
-                <button class="preset-btn" id="presetMed">НОРМ</button>
-                <button class="preset-btn" id="presetFps">ФПС+</button>
+            <div class="tabs">
+                <button class="tab-btn active" id="btnSetTabGfx">ГРАФИКА</button>
+                <button class="tab-btn" id="btnSetTabCtrl">УПРАВЛЕНИЕ</button>
+                <button class="tab-btn" id="btnSetTabSave">СЕЙВ</button>
             </div>
-            <div class="opt-list">
-                <label class="opt-row"><span>Свечение (Bloom)</span><input type="checkbox" id="optBloom"></label>
-                <label class="opt-row"><span>Частицы и эффекты</span><input type="checkbox" id="optParticles"></label>
-                <label class="opt-row"><span>Звёзды и туманность</span><input type="checkbox" id="optStars"></label>
-                <label class="opt-row"><span>Счётчик FPS</span><input type="checkbox" id="optFpsShow"></label>
-                <div class="opt-row">
-                    <span>Качество картинки</span>
-                    <select id="optRes">
-                        <option value="0.75">Низкое (0.75x)</option>
-                        <option value="1">Среднее (1.0x)</option>
-                        <option value="1.5">Высокое (1.5x)</option>
-                    </select>
-                </div>
-                <div class="opt-row" style="gap:8px; margin-top:4px;">
-                    <button id="btnExportSave" class="preset-btn" style="flex:1;">ЭКСПОРТ СЕЙВА</button>
-                    <button id="btnImportSave" class="preset-btn" style="flex:1;">ИМПОРТ СЕЙВА</button>
-                </div>
 
+            <div id="setTabGfx" class="set-tab-body">
+                <button id="btnAutoOpt" class="auto-opt-btn">АВТО-ОПТИМИЗАЦИЯ</button>
+                <div id="autoOptStatus">Автоматический подбор настроек под устройство</div>
+                <div class="preset-row">
+                    <button class="preset-btn" id="presetUltra">УЛЬТРА</button>
+                    <button class="preset-btn" id="presetMed">НОРМ</button>
+                    <button class="preset-btn" id="presetFps">ФПС+</button>
+                </div>
+                <div class="opt-list">
+                    <label class="opt-row"><span>Свечение (Bloom)</span><input type="checkbox" id="optBloom"></label>
+                    <label class="opt-row"><span>Частицы и эффекты</span><input type="checkbox" id="optParticles"></label>
+                    <label class="opt-row"><span>Звёзды и туманность</span><input type="checkbox" id="optStars"></label>
+                    <label class="opt-row"><span>Счётчик FPS</span><input type="checkbox" id="optFpsShow"></label>
+                    <div class="opt-row">
+                        <span>Качество картинки</span>
+                        <select id="optRes">
+                            <option value="0.75">Низкое (0.75x)</option>
+                            <option value="1">Среднее (1.0x)</option>
+                            <option value="1.5">Высокое (1.5x)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="setTabCtrl" class="set-tab-body" style="display:none;">
+                <div class="opt-list">
+                    <div class="opt-row">
+                        <span>Чувствительность камеры: <b id="camSensVal">1.0x</b></span>
+                        <input type="range" id="optCamSens" min="0.4" max="2.2" step="0.1" value="1.0">
+                    </div>
+                    <label class="opt-row">
+                        <span>Авто Shift Lock в бою</span>
+                        <input type="checkbox" id="optAutoLock">
+                    </label>
+                    <div class="opt-row">
+                        <span>Громкость музыки: <b id="musicVolVal">40%</b></span>
+                        <input type="range" id="optMusicVol" min="0" max="1" step="0.05" value="0.4">
+                    </div>
+                    <div class="opt-row">
+                        <span>Громкость звуков: <b id="sfxVolVal">95%</b></span>
+                        <input type="range" id="optSfxVol" min="0" max="1" step="0.05" value="0.95">
+                    </div>
+                </div>
+            </div>
+
+            <div id="setTabSave" class="set-tab-body" style="display:none;">
+                <div class="save-box">
+                    <div id="saveStatsInfo">Киллов: 0 | Побед: 0 | Абилок: 1/34</div>
+                    <div class="save-hint">Скопируйте код сохранения, чтобы перенести прогресс в другой браузер или на новое устройство.</div>
+                    <div class="opt-row" style="gap:8px; margin-top:4px;">
+                        <button id="btnExportSave" class="preset-btn" style="flex:1;">ЭКСПОРТ СЕЙВА</button>
+                        <button id="btnImportSave" class="preset-btn" style="flex:1;">ИМПОРТ СЕЙВА</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -166,6 +202,9 @@
         <div id="joystick-zone"><div id="joystick-knob"></div></div>
 
         <div id="right-actions">
+            <div id="btnShiftLock" class="action-btn lock-btn">
+                <span>LOCK</span>
+            </div>
             <div id="btnAbility" class="action-btn ability-btn">
                 <img id="abImgDisplay" src="Dash.webp" alt="">
                 <span id="abTextDisplay">DASH</span>
@@ -177,6 +216,7 @@
             </div>
             <div id="btnBlock" class="action-btn block-btn">
                 <span>БЛОК</span>
+                <div id="blockCdOverlay" class="cd-overlay"></div>
             </div>
         </div>
 
