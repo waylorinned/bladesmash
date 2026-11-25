@@ -53,6 +53,14 @@ function saveGame() {
     document.getElementById('dailyLeftTxt').innerText = Math.max(0, 3 - gameData.dailyCoinSpinsUsed);
     updateAbilityHudIcon();
     updateLeaderboards3D();
+    updateSaveStatsInfo();
+}
+
+function updateSaveStatsInfo() {
+    const el = document.getElementById('saveStatsInfo');
+    if (el) {
+        el.innerText = `Киллов: ${gameData.kills} | Побед: ${gameData.wins} | Абилок: ${gameData.unlockedAbilities.length}/${ABILITIES.length}`;
+    }
 }
 
 function updateAbilityHudIcon() {
@@ -64,9 +72,12 @@ function updateAbilityHudIcon() {
     abImg.src = ab.img;
     document.getElementById('abTextDisplay').innerText = ab.passive ? 'ПАССИВ' : ab.name.toUpperCase();
     const badge = document.getElementById('abChargeBadge');
-    if (ab.charges && mainPlayer) {
+    if (ab.id === 'blink' && mainPlayer) {
         badge.style.display = 'block';
         badge.innerText = mainPlayer.blinkCharges;
+    } else if (ab.id === 'gales_edge' && mainPlayer) {
+        badge.style.display = 'block';
+        badge.innerText = mainPlayer.galeCharges;
     } else if (ab.id === 'reaper' && mainPlayer && isCombatState()) {
         badge.style.display = 'block';
         badge.innerText = `x${mainPlayer.reaperStacks}`;
@@ -75,12 +86,17 @@ function updateAbilityHudIcon() {
     }
 }
 
-// Audio
+// ==========================================
+// AUDIO
+// ==========================================
 let audioCtx = null;
 let audioCtxUnlocked = false;
 let musicPlaying = false;
 let audioUnlockInFlight = false;
 const soundBuffers = { smash: null, kill: null };
+
+function getSfxVol() { return typeof gfxSettings.sfxVol === 'number' ? gfxSettings.sfxVol : 0.95; }
+function getMusicVol() { return typeof gfxSettings.musicVol === 'number' ? gfxSettings.musicVol : 0.4; }
 
 function createAudioPool(src, size = 6) {
     const list = [];
@@ -92,11 +108,13 @@ function createAudioPool(src, size = 6) {
     let idx = 0;
     return {
         play(volume = 1, rate = 1) {
+            const v = Math.max(0, Math.min(1, volume));
+            if (v <= 0.005) return;
             const a = list[idx];
             idx = (idx + 1) % list.length;
             try {
                 a.pause(); a.currentTime = 0;
-                a.volume = volume; a.playbackRate = rate;
+                a.volume = v; a.playbackRate = rate;
                 a.play().catch(() => {});
             } catch (e) {}
         }
@@ -123,6 +141,8 @@ async function initFastAudio() {
 }
 
 function playBuffer(key, volume = 1.0, rate = 1.0, fallbackPool = null) {
+    const finalVol = Math.max(0, Math.min(1, volume * getSfxVol()));
+    if (finalVol <= 0.005) return;
     if (audioCtx && soundBuffers[key]) {
         try {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -130,22 +150,24 @@ function playBuffer(key, volume = 1.0, rate = 1.0, fallbackPool = null) {
             const gain = audioCtx.createGain();
             src.buffer = soundBuffers[key];
             src.playbackRate.value = rate;
-            gain.gain.value = volume;
+            gain.gain.value = finalVol;
             src.connect(gain); gain.connect(audioCtx.destination);
             src.start(0);
             return;
         } catch (e) {}
     }
-    if (fallbackPool) fallbackPool.play(volume, rate);
+    if (fallbackPool) fallbackPool.play(finalVol, rate);
 }
 
 function playClashSound(speed) {
     const rate = Math.min(1.9, Math.max(0.95, 1.0 + ((speed - 0.85) / 8.5)));
-    playBuffer('smash', 0.95, rate, smashPool);
+    playBuffer('smash', 1.0, rate, smashPool);
 }
 function playKillSound() { playBuffer('kill', 1.0, 1.0, killPool); }
 
 function playSynth(freq1, freq2, dur, type = 'sine', vol = 0.28) {
+    const finalVol = vol * getSfxVol();
+    if (finalVol <= 0.005) return;
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -154,7 +176,7 @@ function playSynth(freq1, freq2, dur, type = 'sine', vol = 0.28) {
         osc.type = type;
         osc.frequency.setValueAtTime(freq1, audioCtx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq2), audioCtx.currentTime + dur);
-        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.setValueAtTime(finalVol, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
         osc.start(); osc.stop(audioCtx.currentTime + dur);
     } catch (e) {}
@@ -168,6 +190,11 @@ const musicTracks = [
 let currentTrackIndex = -1;
 let unplayedIndices = [0, 1, 2];
 
+function applyMusicVolume() {
+    const v = getMusicVol();
+    musicTracks.forEach(t => { if (t) t.volume = v; });
+}
+
 function playRandomMusic() {
     if (unplayedIndices.length === 0) {
         unplayedIndices = [0, 1, 2].filter(i => i !== currentTrackIndex);
@@ -177,7 +204,7 @@ function playRandomMusic() {
     const track = musicTracks[currentTrackIndex];
     if (!track) return Promise.reject();
     track.currentTime = 0;
-    track.volume = 0.4;
+    track.volume = getMusicVol();
     const p = track.play();
     if (p && typeof p.then === 'function') {
         return p.then(() => { musicPlaying = true; });
@@ -244,7 +271,9 @@ function showKillFeed(botName, kills) {
     killFeedTimeout = setTimeout(() => { box.style.display = 'none'; }, 2800);
 }
 
-// Scene & renderer
+// ==========================================
+// SCENE & RENDERER
+// ==========================================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x030510);
 scene.fog = new THREE.FogExp2(0x05081a, 0.0014);
@@ -575,9 +604,13 @@ targetGroup.position.copy(TRAIN_TARGET_POS);
 scene.add(targetGroup);
 
 // ==========================================
-// VFX ENGINE
+// VFX ENGINE & WORLD ABILITY OBJECTS
 // ==========================================
 const vfxList = [];
+const windWalls = [];
+const arenaTraps = [];
+const arenaTotems = [];
+
 const GEO_SPARK = new THREE.BoxGeometry(0.32, 0.32, 2.8);
 const GEO_RING = new THREE.RingGeometry(0.76, 1.0, 28);
 const GEO_SLASH = new THREE.RingGeometry(4.2, 8.6, 22, 1, -1.25, 2.5);
@@ -591,6 +624,15 @@ let targetFov = 62;
 
 function addShake(amount) {
     camShake = Math.min(3.5, camShake + amount);
+}
+
+function clearWorldAbilityObjects() {
+    windWalls.forEach(w => scene.remove(w.mesh));
+    windWalls.length = 0;
+    arenaTraps.forEach(t => scene.remove(t.mesh));
+    arenaTraps.length = 0;
+    arenaTotems.forEach(t => scene.remove(t.mesh));
+    arenaTotems.length = 0;
 }
 
 function spawnShockwave(pos, hexColor, startScale, endScale, decay = 0.055, horizontal = true, rotY = 0) {
@@ -750,6 +792,173 @@ function spawnIceShatter(pos) {
     }
 }
 
+function spawnWindWall(owner, startPos, dir) {
+    const flatDir = dir.clone(); flatDir.y = 0;
+    if (flatDir.lengthSq() < 0.001) flatDir.set(0, 0, 1);
+    flatDir.normalize();
+
+    const g = new THREE.Group();
+    const wallMat = new THREE.MeshBasicMaterial({
+        color: 0xccffff, side: THREE.DoubleSide, transparent: true, opacity: 0.48,
+        blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(18, 12), wallMat);
+    g.add(plane);
+    const frame = new THREE.Mesh(
+        new THREE.BoxGeometry(18.6, 12.6, 0.6),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending })
+    );
+    g.add(frame);
+
+    g.position.copy(startPos).add(flatDir.clone().multiplyScalar(8));
+    g.position.y = 7;
+    g.rotation.y = Math.atan2(flatDir.x, flatDir.z);
+    scene.add(g);
+
+    windWalls.push({ owner, mesh: g, dir: flatDir, life: 52, hitBall: false });
+}
+
+function spawnBladeTrap(owner, pos) {
+    for (let i = arenaTraps.length - 1; i >= 0; i--) {
+        if (arenaTraps[i].owner === owner) {
+            scene.remove(arenaTraps[i].mesh);
+            arenaTraps.splice(i, 1);
+        }
+    }
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(7.2, 8.2, 0.8, 8),
+        new THREE.MeshLambertMaterial({ color: 0x262235 })
+    );
+    g.add(base);
+    const ring = new THREE.Mesh(
+        new THREE.RingGeometry(5.6, 7.6, 20),
+        new THREE.MeshBasicMaterial({ color: 0xff1144, side: THREE.DoubleSide, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.5;
+    g.add(ring);
+
+    g.position.set(pos.x, 0.4, pos.z);
+    scene.add(g);
+    arenaTraps.push({ owner, mesh: g, ring, life: 1080, armed: true });
+}
+
+function spawnChieftainTotem(owner, pos) {
+    for (let i = arenaTotems.length - 1; i >= 0; i--) {
+        if (arenaTotems[i].owner === owner) {
+            scene.remove(arenaTotems[i].mesh);
+            arenaTotems.splice(i, 1);
+        }
+    }
+    const g = new THREE.Group();
+    const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.4, 1.8, 12, 8),
+        new THREE.MeshLambertMaterial({ color: 0x6e4422 })
+    );
+    pillar.position.y = 6;
+    g.add(pillar);
+
+    const wings = new THREE.Mesh(
+        new THREE.BoxGeometry(7.5, 2.2, 0.9),
+        new THREE.MeshLambertMaterial({ color: 0x8a5628 })
+    );
+    wings.position.y = 9.5;
+    g.add(wings);
+
+    const crown = new THREE.Mesh(
+        new THREE.SphereGeometry(1.6, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffcc33, blending: THREE.AdditiveBlending })
+    );
+    crown.position.y = 12.6;
+    g.add(crown);
+
+    const zoneRing = new THREE.Mesh(
+        new THREE.RingGeometry(28.5, 30.5, 36),
+        new THREE.MeshBasicMaterial({ color: 0xffbb22, side: THREE.DoubleSide, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    zoneRing.rotation.x = -Math.PI / 2;
+    zoneRing.position.y = 0.25;
+    g.add(zoneRing);
+
+    const zoneFill = new THREE.Mesh(
+        new THREE.CircleGeometry(28.5, 36),
+        new THREE.MeshBasicMaterial({ color: 0xffaa00, side: THREE.DoubleSide, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    zoneFill.rotation.x = -Math.PI / 2;
+    zoneFill.position.y = 0.2;
+    g.add(zoneFill);
+
+    g.position.set(pos.x, 0, pos.z);
+    scene.add(g);
+    arenaTotems.push({ owner, mesh: g, zoneRing, radius: 30, life: 600 });
+}
+
+function updateWorldAbilityObjects() {
+    // Wind Walls (Gale's Edge)
+    for (let i = windWalls.length - 1; i >= 0; i--) {
+        const w = windWalls[i];
+        w.life--;
+        w.mesh.position.addScaledVector(w.dir, 1.75);
+        if (!w.hitBall && isCombatState() && ball.mesh.visible && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
+            const dist = Math.hypot(w.mesh.position.x - ball.mesh.position.x, w.mesh.position.z - ball.mesh.position.z);
+            if (dist < 11) {
+                w.hitBall = true;
+                ball.unfreeze();
+                ball.curveTimer = 26;
+                ball.vel.copy(w.dir).multiplyScalar(Math.max(ball.speed * 1.45, 2.2));
+                ball.vel.y = 0.35;
+                spawnShockwave(ball.mesh.position.clone(), 0xccffff, 2, 16, 0.06, false, w.mesh.rotation.y);
+                spawnSparks(ball.mesh.position.clone(), 0xffffff, 14, 1.1);
+                playSynth(520, 1100, 0.2, 'sine', 0.26);
+            }
+        }
+        if (w.life <= 0) {
+            scene.remove(w.mesh);
+            windWalls.splice(i, 1);
+        }
+    }
+
+    // Blade Traps
+    for (let i = arenaTraps.length - 1; i >= 0; i--) {
+        const tr = arenaTraps[i];
+        tr.life--;
+        tr.ring.rotation.z += 0.07;
+        if (tr.armed && isCombatState() && ball.mesh.visible && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
+            const dist = Math.hypot(tr.mesh.position.x - ball.mesh.position.x, tr.mesh.position.z - ball.mesh.position.z);
+            if (dist < 10.5 && ball.mesh.position.y < 16) {
+                tr.armed = false;
+                ball.unfreeze();
+                ball.aeroTimer = 0;
+                ball.trapTimer = 28;
+                ball.trapOwner = tr.owner;
+                ball.mesh.position.set(tr.mesh.position.x, 5.5, tr.mesh.position.z);
+                spawnShockwave(tr.mesh.position.clone(), 0xff1144, 2, 18, 0.05, true);
+                spawnSparks(ball.mesh.position.clone(), 0xff2255, 18, 1.1);
+                playSynth(240, 680, 0.25, 'sawtooth', 0.3);
+                scene.remove(tr.mesh);
+                arenaTraps.splice(i, 1);
+                continue;
+            }
+        }
+        if (tr.life <= 0) {
+            scene.remove(tr.mesh);
+            arenaTraps.splice(i, 1);
+        }
+    }
+
+    // Chieftain's Totems
+    for (let i = arenaTotems.length - 1; i >= 0; i--) {
+        const tm = arenaTotems[i];
+        tm.life--;
+        tm.zoneRing.rotation.z += 0.03;
+        if (tm.life <= 0 || !tm.owner.isAlive) {
+            scene.remove(tm.mesh);
+            arenaTotems.splice(i, 1);
+        }
+    }
+}
+
 function updateVFX() {
     for (let i = vfxList.length - 1; i >= 0; i--) {
         const fx = vfxList[i];
@@ -896,11 +1105,12 @@ function getSwordAccentColor(swordId) {
 }
 
 // ==========================================
-// SMOOTH CAMERA & FLOATING DYNAMIC JOYSTICK
+// SMOOTH CAMERA, SHIFT LOCK & FLOATING JOYSTICK
 // ==========================================
 let camTheta = Math.PI, camPhi = 1.08, camRadius = 42;
 let camThetaSmooth = camTheta, camPhiSmooth = camPhi;
 let isCamDragging = false, lastTouchX = 0, lastTouchY = 0, camTouchId = null;
+let shiftLockActive = false;
 
 let joyX = 0, joyY = 0;
 let moveX = 0, moveZ = 0, isMoving = false;
@@ -910,6 +1120,32 @@ const maxJoy = 34;
 const camZone = document.getElementById('camera-zone');
 const knob = document.getElementById('joystick-knob');
 const zone = document.getElementById('joystick-zone');
+const crosshairEl = document.getElementById('crosshair');
+const btnShiftLock = document.getElementById('btnShiftLock');
+
+function setShiftLock(enabled) {
+    shiftLockActive = !!enabled;
+    if (btnShiftLock) btnShiftLock.classList.toggle('active', shiftLockActive);
+    if (crosshairEl) crosshairEl.style.display = shiftLockActive ? 'block' : 'none';
+}
+
+if (btnShiftLock) {
+    btnShiftLock.addEventListener('touchstart', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        setShiftLock(!shiftLockActive);
+    }, { passive: false });
+    btnShiftLock.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setShiftLock(!shiftLockActive);
+    });
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') setShiftLock(!shiftLockActive);
+    if (e.code === 'Space' && mainPlayer) mainPlayer.jump();
+    if (e.code === 'KeyF' && mainPlayer) mainPlayer.tryParry();
+    if ((e.code === 'KeyQ' || e.code === 'KeyE') && mainPlayer) mainPlayer.activateAbility();
+});
 
 function snapCamera(theta, phi = 1.08) {
     camTheta = theta;
@@ -993,6 +1229,7 @@ camZone.addEventListener('touchstart', (e) => {
 }, { passive: false });
 
 window.addEventListener('touchmove', (e) => {
+    const sens = typeof gfxSettings.camSens === 'number' ? gfxSettings.camSens : 1.0;
     for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (joyActive && t.identifier === joyTouchId) {
@@ -1012,8 +1249,8 @@ window.addEventListener('touchmove', (e) => {
             e.preventDefault();
             const dcx = t.clientX - lastTouchX;
             const dcy = t.clientY - lastTouchY;
-            camTheta -= dcx * 0.0065;
-            camPhi -= dcy * 0.0042;
+            camTheta -= dcx * 0.0065 * sens;
+            camPhi -= dcy * 0.0042 * sens;
             camPhi = Math.max(0.45, Math.min(1.3, camPhi));
             lastTouchX = t.clientX;
             lastTouchY = t.clientY;
@@ -1052,25 +1289,28 @@ function addAccessoryToHead(headMesh, accType) {
 }
 
 // ==========================================
-// TARGET HELPER FOR AIMED ABILITIES (SWAP, SCOPOPHOBIA)
+// TARGET HELPER FOR AIMED ABILITIES
 // ==========================================
 const _helperAim = new THREE.Vector3();
 const _helperTo = new THREE.Vector3();
+
+function getEntityAimVector(caster, outVec) {
+    if (caster === mainPlayer) {
+        camera.getWorldDirection(outVec);
+        outVec.y = 0;
+        if (outVec.lengthSq() < 0.0001) {
+            outVec.set(Math.sin(caster.mesh.rotation.y), 0, Math.cos(caster.mesh.rotation.y));
+        }
+        return outVec.normalize();
+    }
+    return outVec.set(Math.sin(caster.mesh.rotation.y), 0, Math.cos(caster.mesh.rotation.y)).normalize();
+}
 
 function findAimedEnemy(caster, maxDist = 140, minDot = -0.15) {
     const others = players.filter(p => p.isAlive && p !== caster && !p.isInvis);
     if (others.length === 0) return null;
 
-    if (caster === mainPlayer) {
-        camera.getWorldDirection(_helperAim);
-        _helperAim.y = 0;
-        if (_helperAim.lengthSq() < 0.0001) {
-            _helperAim.set(Math.sin(caster.mesh.rotation.y), 0, Math.cos(caster.mesh.rotation.y));
-        }
-        _helperAim.normalize();
-    } else {
-        _helperAim.set(Math.sin(caster.mesh.rotation.y), 0, Math.cos(caster.mesh.rotation.y)).normalize();
-    }
+    getEntityAimVector(caster, _helperAim);
 
     let best = null;
     let bestScore = -999;
@@ -1088,7 +1328,7 @@ function findAimedEnemy(caster, maxDist = 140, minDot = -0.15) {
 }
 
 // ==========================================
-// ENTITIES (ALL 25 ABILITIES)
+// ENTITIES (ALL 34 ABILITIES + SMART PRE-FIRE AI)
 // ==========================================
 const players = [];
 let mainPlayer = null;
@@ -1106,7 +1346,7 @@ class Entity {
         this.testSlot = profile.testSlot || 0;
         this.isAlive = true;
         this.tier = profile.tier || 'mid';
-        this.baseSpeed = isBot ? (this.tier === 'sweat' ? 0.46 : (this.tier === 'pro' ? 0.42 : 0.36)) : 0.58;
+        this.baseSpeed = isBot ? (this.tier === 'sweat' ? 0.50 : (this.tier === 'pro' ? 0.45 : 0.39)) : 0.58;
 
         const skin = profile.skin || { head: 0x00aaff, torso: 0x0088ff, arms: 0x0077ee, legs: 0x0055bb, acc: 'none' };
         this.skinColors = skin;
@@ -1135,13 +1375,25 @@ class Entity {
         this.scopoTimer = 0;
         this.scopoWeakHit = false;
         this.martyrSlowTimer = 0;
+        this.qiTimer = 0;
+        this.silencedTimer = 0;
+        this.absConfTimer = 0;
+        this.hookPullTimer = 0;
+        this.hookDest = new THREE.Vector3();
+
         this.rapturePoseTimer = 0;
         this.blinkCharges = 3;
+        this.galeCharges = 2;
         this.reaperStacks = 0;
         this.isPlatformActive = false;
         this.walkCycle = Math.random() * 10;
+
+        // AI state for pre-fire & tactical spacing
         this.parryDecided = false;
-        this.currentReactionMs = 240;
+        this.prefireLeadFrames = 9;
+        this.currentReactionMs = 200;
+        this.strafeDir = Math.random() < 0.5 ? 1 : -1;
+        this.strafeSwapTimer = 60 + Math.floor(Math.random() * 90);
 
         this.mesh = new THREE.Group();
         this.mesh.position.set((Math.random() - 0.5) * 40, this.baseY, LOBBY_Z + (Math.random() - 0.5) * 40);
@@ -1207,7 +1459,40 @@ class Entity {
         this.windAuraGroup.visible = false;
         this.mesh.add(this.windAuraGroup);
 
-        // Virus green toxic ring
+        // Qi Charge white/silver energy aura
+        this.qiAuraGroup = new THREE.Group();
+        [[-5.0, 4.4, 5.4], [0, 3.8, 4.5]].forEach(([yPos, r1, r2]) => {
+            const r = new THREE.Mesh(
+                new THREE.RingGeometry(r1, r2, 24),
+                new THREE.MeshBasicMaterial({ color: 0xeeeeff, side: THREE.DoubleSide, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
+            );
+            r.rotation.x = -Math.PI / 2;
+            r.position.y = yPos;
+            this.qiAuraGroup.add(r);
+        });
+        this.qiAuraGroup.visible = false;
+        this.mesh.add(this.qiAuraGroup);
+
+        // Absolute Confidence fiery crimson ring
+        this.absConfAura = new THREE.Mesh(
+            new THREE.RingGeometry(5.6, 7.2, 28),
+            new THREE.MeshBasicMaterial({ color: 0xff1133, side: THREE.DoubleSide, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
+        );
+        this.absConfAura.rotation.x = -Math.PI / 2;
+        this.absConfAura.position.y = -5.4;
+        this.absConfAura.visible = false;
+        this.mesh.add(this.absConfAura);
+
+        // Pulse silence lock indicator
+        this.silencedAura = new THREE.Mesh(
+            new THREE.TorusGeometry(2.8, 0.2, 6, 16),
+            new THREE.MeshBasicMaterial({ color: 0xff2222, blending: THREE.AdditiveBlending })
+        );
+        this.silencedAura.rotation.x = Math.PI / 2;
+        this.silencedAura.position.y = 2.0;
+        this.silencedAura.visible = false;
+        this.mesh.add(this.silencedAura);
+
         this.virusAura = new THREE.Mesh(
             new THREE.TorusGeometry(3.4, 0.24, 8, 22),
             new THREE.MeshBasicMaterial({ color: 0x22ff44, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending })
@@ -1217,7 +1502,6 @@ class Entity {
         this.virusAura.visible = false;
         this.mesh.add(this.virusAura);
 
-        // Scopophobia crimson eye-mark ring
         this.scopoAura = new THREE.Mesh(
             new THREE.RingGeometry(2.4, 3.6, 18),
             new THREE.MeshBasicMaterial({ color: 0xff0044, side: THREE.DoubleSide, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })
@@ -1267,14 +1551,30 @@ class Entity {
         return this.getCurrentAbility() === 'quad_jump' ? 4 : 2;
     }
 
+    getTotemEffect() {
+        let bonus = 1.0;
+        let inOwn = false;
+        for (let i = 0; i < arenaTotems.length; i++) {
+            const tm = arenaTotems[i];
+            const d = Math.hypot(this.mesh.position.x - tm.mesh.position.x, this.mesh.position.z - tm.mesh.position.z);
+            if (d <= tm.radius) {
+                if (tm.owner === this) { bonus = Math.max(bonus, 1.35); inOwn = true; }
+                else bonus = Math.min(bonus, 0.7);
+            }
+        }
+        return { speedMul: bonus, inOwn };
+    }
+
     getMoveSpeed() {
-        if (this.stunTimer > 0) return 0;
+        if (this.stunTimer > 0 || this.hookPullTimer > 0) return 0;
         let spd = this.baseSpeed;
         if (this.shadowTimer > 0) spd *= 2.05;
         if (this.windTimer > 0) spd *= 1.48;
+        if (this.qiTimer > 0) spd *= 1.35;
         if (this.getCurrentAbility() === 'reaper' && this.reaperStacks > 0) {
             spd *= (1 + this.reaperStacks * 0.11);
         }
+        spd *= this.getTotemEffect().speedMul;
         if (this.virusTimer > 0) spd *= 0.65;
         if (this.scopoTimer > 0) spd *= 0.55;
         if (this.martyrSlowTimer > 0) spd *= 0.6;
@@ -1282,7 +1582,7 @@ class Entity {
     }
 
     jump() {
-        if (!this.isAlive || this.stunTimer > 0 || this.isPlatformActive) return;
+        if (!this.isAlive || this.stunTimer > 0 || this.hookPullTimer > 0 || this.isPlatformActive) return;
         if (this.jumpsLeft <= 0) return;
         this.jumpsLeft--;
         this.velY = this.windTimer > 0 ? 2.15 : 1.68;
@@ -1315,6 +1615,13 @@ class Entity {
     }
 
     updateVerticalPhysics() {
+        if (this.hookPullTimer > 0) {
+            this.hookPullTimer--;
+            this.mesh.position.x += (this.hookDest.x - this.mesh.position.x) * 0.24;
+            this.mesh.position.z += (this.hookDest.z - this.mesh.position.z) * 0.24;
+            this.clampBounds();
+            return;
+        }
         if (this.isPlatformActive && isCombatState()) return;
         if (this.mesh.position.y > this.baseY || this.velY !== 0) {
             this.mesh.position.y += this.velY;
@@ -1336,6 +1643,32 @@ class Entity {
             this.stunRing.rotation.z += 0.22;
         } else {
             this.stunRing.visible = false;
+        }
+
+        if (this.silencedTimer > 0) {
+            this.silencedTimer--;
+            this.silencedAura.visible = true;
+            this.silencedAura.rotation.z -= 0.18;
+        } else {
+            this.silencedAura.visible = false;
+        }
+
+        if (this.qiTimer > 0) {
+            this.qiTimer--;
+            this.qiAuraGroup.visible = true;
+            this.qiAuraGroup.rotation.y += 0.14;
+        } else {
+            this.qiAuraGroup.visible = false;
+        }
+
+        if (this.absConfTimer > 0) {
+            this.absConfTimer--;
+            this.absConfAura.visible = true;
+            this.absConfAura.rotation.z += 0.09;
+            const p = 1.0 + Math.sin(performance.now() * 0.018) * 0.12;
+            this.absConfAura.scale.setScalar(p);
+        } else {
+            this.absConfAura.visible = false;
         }
 
         if (this.virusTimer > 0) {
@@ -1387,6 +1720,16 @@ class Entity {
             this.shieldGroup.rotation.x += 0.025;
             if (this.forcefieldTimer <= 0) this.shieldGroup.visible = false;
         }
+    }
+
+    stripActiveBuffs() {
+        this.isInvis = false; this.invisTimer = 0; this.setOpacity(1);
+        this.forcefieldTimer = 0; this.shieldGroup.visible = false;
+        this.windTimer = 0; this.windAuraGroup.visible = false;
+        this.shadowTimer = 0;
+        this.qiTimer = 0; this.qiAuraGroup.visible = false;
+        this.absConfTimer = 0; this.absConfAura.visible = false;
+        this.isPlatformActive = false; this.platformMesh.visible = false;
     }
 
     setTargetHighlight(isTargeted) {
@@ -1449,28 +1792,40 @@ class Entity {
 
     activateAbility() {
         if (!this.isAlive || !isCombatState() || this.stunTimer > 0) return false;
+        if (this.silencedTimer > 0) {
+            if (!this.isBot) showStatus('АБИЛКА ОТКЛЮЧЕНА (PULSE)', '#ff2233', 1000);
+            return false;
+        }
         const type = this.getCurrentAbility();
         const abInfo = ABILITIES.find(a => a.id === type);
         if (!abInfo || abInfo.passive) return false;
         const ignoreCd = (!this.isBot && gameState === 'test' && testState.noCd);
         if (!ignoreCd && Date.now() < this.abilityReadyAt) return false;
 
+        const aliveCount = players.filter(p => p.isAlive).length;
+        // Invisibility is disabled in 1v1 duels
+        if (type === 'invis' && gameState === 'playing' && aliveCount <= 2) {
+            if (!this.isBot) showStatus('INVISIBILITY ОТКЛЮЧЕН В 1 НА 1', '#ffaa00', 1300);
+            return false;
+        }
+
         const cdMs = ignoreCd ? 250 : abInfo.cd * 1000;
-        const rotY = this.mesh.rotation.y;
-        const lookDir = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY));
+        const aimVec = new THREE.Vector3();
+        getEntityAimVector(this, aimVec);
+        const rotY = Math.atan2(aimVec.x, aimVec.z);
         const startPos = this.mesh.position.clone();
 
         if (type === 'dash') {
             if (!this.isBot) { playSynth(320, 90, 0.2, 'sine', 0.3); targetFov = 71; }
             spawnShockwave(startPos, 0x00ccff, 2, 10, 0.08, false, rotY);
             spawnAfterimage(startPos, 0x00aaff);
-            this.mesh.position.add(lookDir.multiplyScalar(32));
+            this.mesh.position.add(aimVec.clone().multiplyScalar(32));
             this.clampBounds();
             spawnSparks(this.mesh.position, 0x00ccff, 10, 0.9);
             this.abilityReadyAt = Date.now() + cdMs;
         } else if (type === 'thunder_dash') {
             if (!this.isBot) { playSynth(950, 220, 0.16, 'sawtooth', 0.26); addShake(0.45); targetFov = 72; }
-            this.mesh.position.add(lookDir.multiplyScalar(26));
+            this.mesh.position.add(aimVec.clone().multiplyScalar(26));
             this.clampBounds();
             spawnLightning(startPos, this.mesh.position.clone(), 0xffdd00, 4);
             spawnShockwave(this.mesh.position, 0xffdd00, 2, 13, 0.07, true);
@@ -1480,7 +1835,7 @@ class Entity {
             if (!this.isBot) playSynth(700, 1250, 0.12, 'triangle', 0.25);
             spawnShockwave(startPos, 0x00eeff, 2, 9, 0.08, false, rotY);
             spawnAfterimage(startPos, 0x00eeff);
-            this.mesh.position.add(lookDir.multiplyScalar(23));
+            this.mesh.position.add(aimVec.clone().multiplyScalar(23));
             this.clampBounds();
             spawnShockwave(this.mesh.position, 0x00eeff, 2, 10, 0.08, false, rotY);
             spawnSparks(this.mesh.position, 0x00eeff, 10, 0.8);
@@ -1492,6 +1847,115 @@ class Entity {
                 this.abilityReadyAt = Date.now() + 250;
             }
             if (!this.isBot) updateAbilityHudIcon();
+        } else if (type === 'gales_edge') {
+            if (!this.isBot) playSynth(440, 880, 0.2, 'sine', 0.28);
+            this.rapturePoseTimer = 12;
+            spawnSlashArc(this, 0xccffff, 1.25);
+            spawnWindWall(this, startPos, aimVec);
+            this.galeCharges--;
+            if (this.galeCharges <= 0) {
+                this.abilityReadyAt = Date.now() + cdMs;
+                this.galeCharges = 2;
+            } else {
+                this.abilityReadyAt = Date.now() + 300;
+            }
+            if (!this.isBot) updateAbilityHudIcon();
+        } else if (type === 'hell_hook') {
+            const enemy = findAimedEnemy(this, 165, -0.1);
+            if (!enemy) {
+                if (!this.isBot) showStatus('НЕТ ЦЕЛИ ДЛЯ КРЮКА', '#4488ff', 1000);
+                return false;
+            }
+            const toEnemy = new THREE.Vector3().subVectors(enemy.mesh.position, startPos);
+            toEnemy.y = 0;
+            if (toEnemy.lengthSq() > 0.001) toEnemy.normalize();
+            const pullDest = startPos.clone().add(toEnemy.multiplyScalar(13));
+            enemy.hookDest.set(pullDest.x, enemy.baseY, pullDest.z);
+            enemy.hookPullTimer = 16;
+            enemy.stunTimer = Math.max(enemy.stunTimer, 28);
+            spawnLightning(startPos, enemy.mesh.position.clone(), 0x2266ff, 5);
+            spawnShockwave(enemy.mesh.position.clone(), 0x2266ff, 2, 14, 0.06, true);
+            spawnSparks(enemy.mesh.position.clone(), 0x55aaff, 16, 1.1);
+            if (!this.isBot || enemy === mainPlayer) {
+                playSynth(220, 560, 0.25, 'sawtooth', 0.32);
+                addShake(0.6);
+                if (enemy === mainPlayer) showStatus('ВАС ПРИТЯНУЛИ (HELL HOOK)', '#4488ff', 1300);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'qi_charge') {
+            this.qiTimer = 420;
+            spawnShockwave(startPos, 0xffffff, 2, 18, 0.05, true);
+            spawnSparks(startPos, 0xddeeff, 18, 1.1);
+            if (!this.isBot) {
+                playSynth(300, 960, 0.34, 'triangle', 0.32);
+                showStatus('QI CHARGE: СИЛА И СКОРОСТЬ (7с)', '#eef6ff', 1400);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'pulse') {
+            spawnShockwave(startPos, 0xff1122, 3, 55, 0.04, true);
+            spawnShockwave(startPos, 0xffffff, 2, 36, 0.055, true);
+            spawnSparks(startPos, 0xff2233, 24, 1.4);
+            if (!this.isBot) { playSynth(140, 480, 0.32, 'sawtooth', 0.36); addShake(0.8); }
+            let hitCount = 0;
+            players.forEach(p => {
+                if (p.isAlive && p !== this) {
+                    const d = Math.hypot(p.mesh.position.x - startPos.x, p.mesh.position.z - startPos.z);
+                    if (d <= 58) {
+                        p.silencedTimer = 300;
+                        p.stripActiveBuffs();
+                        spawnLightning(startPos, p.mesh.position.clone(), 0xff1122, 3);
+                        hitCount++;
+                        if (p === mainPlayer) {
+                            playSynth(180, 70, 0.3, 'sawtooth', 0.3);
+                            showStatus('PULSE: АБИЛКИ ОТКЛЮЧЕНЫ (5с)', '#ff2233', 1600);
+                        }
+                    }
+                }
+            });
+            if (!this.isBot && hitCount > 0) showStatus(`PULSE ЗАДЕЛ ВРАГОВ: ${hitCount}`, '#ff2233', 1300);
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'blade_trap') {
+            spawnBladeTrap(this, startPos);
+            spawnShockwave(new THREE.Vector3(startPos.x, 0.5, startPos.z), 0xff1144, 2, 12, 0.06, true);
+            if (!this.isBot) {
+                playSynth(420, 180, 0.2, 'triangle', 0.28);
+                showStatus('BLADE TRAP УСТАНОВЛЕНА', '#ff2255', 1200);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'chieftains_totem') {
+            spawnChieftainTotem(this, startPos);
+            spawnShockwave(new THREE.Vector3(startPos.x, 0.5, startPos.z), 0xffbb22, 2, 30, 0.045, true);
+            if (!this.isBot) {
+                playSynth(280, 620, 0.3, 'triangle', 0.3);
+                showStatus('ТОТЕМ УСТАНОВЛЕН (10с)', '#ffcc33', 1300);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'absolute_confidence') {
+            this.absConfTimer = 360;
+            spawnShockwave(startPos, 0xff1133, 2, 20, 0.05, true);
+            spawnSparks(startPos, 0xff2244, 18, 1.1);
+            if (!this.isBot) {
+                playSynth(260, 720, 0.32, 'sawtooth', 0.32);
+                showStatus('ABSOLUTE CONFIDENCE (6с)', '#ff2244', 1500);
+            }
+            this.abilityReadyAt = Date.now() + cdMs;
+        } else if (type === 'flash_counter') {
+            this.abilityReadyAt = Date.now() + cdMs;
+            const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
+            const range = 24 + (ball.speed * 3.4);
+            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
+                this.rapturePoseTimer = 18;
+                playClashSound(ball.speed + 2.2);
+                playSynth(880, 320, 0.28, 'sawtooth', 0.38);
+                spawnSlashArc(this, 0xcc44ff, 1.65);
+                addShake(1.6);
+                ball.triggerFlashCounter(this);
+                this.blockCooldown = 0; this.parryActiveTimer = 0;
+            } else {
+                this.rapturePoseTimer = 40;
+                spawnSlashArc(this, 0xaa33ff, 1.15);
+                if (!this.isBot) playSynth(260, 140, 0.22, 'triangle', 0.22);
+            }
         } else if (type === 'super_jump') {
             if (!this.isBot) playSynth(240, 820, 0.28, 'sine', 0.3);
             this.velY = 3.3;
@@ -1537,7 +2001,6 @@ class Entity {
             showStatus('МЯЧ ЗАМОРОЖЕН', '#00eeff', 1400);
             this.abilityReadyAt = Date.now() + cdMs;
         } else if (type === 'forcefield') {
-            const aliveCount = players.filter(p => p.isAlive).length;
             this.forcefieldMax = aliveCount <= 2 ? 180 : 420;
             this.forcefieldTimer = this.forcefieldMax;
             spawnShockwave(startPos, 0xff5522, 2, 14, 0.06, true);
@@ -1587,7 +2050,7 @@ class Entity {
             }
             this.abilityReadyAt = Date.now() + cdMs;
         } else if (type === 'pull') {
-            if (!ball.mesh.visible || ball.teleTimer > 0) return false;
+            if (!ball.mesh.visible || ball.teleTimer > 0 || ball.trapTimer > 0) return false;
             if (ball.target === this) {
                 if (!this.isBot) showStatus('МЯЧ УЖЕ ЛЕТИТ В ВАС', '#ff4466', 1000);
                 return false;
@@ -1605,7 +2068,7 @@ class Entity {
             }
             this.abilityReadyAt = Date.now() + cdMs;
         } else if (type === 'ninja_dash') {
-            if (!ball.mesh.visible || ball.teleTimer > 0 || ball.selfBounceGrace > 0) return false;
+            if (!ball.mesh.visible || ball.teleTimer > 0 || ball.trapTimer > 0 || ball.selfBounceGrace > 0) return false;
             const bPos = ball.mesh.position.clone();
             const toBall = new THREE.Vector3().subVectors(bPos, startPos);
             const dist = toBall.length();
@@ -1643,7 +2106,7 @@ class Entity {
             ball.pickNewTarget(this);
             this.abilityReadyAt = Date.now() + cdMs;
         } else if (type === 'telekinesis') {
-            if (!ball.mesh.visible || ball.teleTimer > 0) return false;
+            if (!ball.mesh.visible || ball.teleTimer > 0 || ball.trapTimer > 0) return false;
             ball.startTelekinesis(this);
             playSynth(300, 920, 0.35, 'sine', 0.32);
             if (!this.isBot) showStatus('ТЕЛЕКИНЕЗ: НАВЕДИТЕ КАМЕРУ', '#cc44ff', 1700);
@@ -1653,7 +2116,7 @@ class Entity {
             this.abilityReadyAt = Date.now() + cdMs;
             const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
             const range = 22 + (ball.speed * 3.2);
-            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
+            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
                 this.rapturePoseTimer = 20;
                 playClashSound(ball.speed + 2.0);
                 playSynth(210, 75, 0.35, 'sawtooth', 0.4);
@@ -1670,7 +2133,7 @@ class Entity {
             this.abilityReadyAt = Date.now() + cdMs;
             const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
             const range = 22 + (ball.speed * 3.2);
-            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
+            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
                 this.rapturePoseTimer = 22;
                 playClashSound(ball.speed + 2.2);
                 playSynth(420, 1150, 0.36, 'sawtooth', 0.38);
@@ -1687,7 +2150,7 @@ class Entity {
             this.abilityReadyAt = Date.now() + cdMs;
             const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
             const range = 22 + (ball.speed * 3.2);
-            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
+            if (ball.target === this && distToBall < range && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
                 this.rapturePoseTimer = 24;
                 playClashSound(ball.speed + 2.5);
                 playSynth(180, 60, 0.38, 'sawtooth', 0.44);
@@ -1726,20 +2189,22 @@ class Entity {
 
     applyStandardParryBoost() {
         const reaperBonus = (this.getCurrentAbility() === 'reaper') ? this.reaperStacks * 0.16 : 0;
-        let delta = 0.32 + reaperBonus;
+        const qiBonus = this.qiTimer > 0 ? 0.45 : 0;
+        const totemBonus = this.getTotemEffect().inOwn ? 0.35 : 0;
+        let delta = 0.32 + reaperBonus + qiBonus + totemBonus;
         if (this.scopoWeakHit) {
             delta = -0.25;
             this.scopoWeakHit = false;
             if (this === mainPlayer) showStatus('УДАР ОСЛАБЛЕН (SCOPOPHOBIA)', '#ff2255', 1100);
         }
-        ball.speed = Math.max(0.85, Math.min(ball.speed + delta, 9.2));
+        ball.speed = Math.max(0.85, Math.min(ball.speed + delta, 9.4));
         ball.raptureBoost = false;
         ball.aeroTimer = 0;
         ball.martyrBall = false;
     }
 
     updateParryLogic() {
-        if (this.forcefieldTimer > 0 && isCombatState() && ball.target === this && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
+        if (this.forcefieldTimer > 0 && isCombatState() && ball.target === this && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
             if (this.mesh.position.distanceTo(ball.mesh.position) < 14 + ball.speed * 1.5) {
                 playClashSound(ball.speed);
                 ball.unfreeze();
@@ -1754,8 +2219,9 @@ class Entity {
             this.parryActiveTimer--;
             this.rArmGroup.rotation.x = -Math.PI / 1.5;
 
-            if (isCombatState() && ball.target === this && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0) {
-                const parryRange = 15 + (ball.speed * 2.5);
+            if (isCombatState() && ball.target === this && ball.selfBounceGrace <= 0 && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
+                const qiRangeBonus = this.qiTimer > 0 ? 4 : 0;
+                const parryRange = 15 + qiRangeBonus + (ball.speed * 2.5);
                 if (this.mesh.position.distanceTo(ball.mesh.position) < parryRange) {
                     playClashSound(ball.speed);
                     ball.unfreeze();
@@ -1814,6 +2280,20 @@ class Entity {
 
         const aliveList = players.filter(p => p.isAlive);
         document.getElementById('aliveCount').innerText = aliveList.length;
+
+        // Entering 1v1: immediately cancel active Invisibility on remaining players
+        if (aliveList.length === 2) {
+            let strippedAny = false;
+            aliveList.forEach(p => {
+                if (p.isInvis) {
+                    p.isInvis = false;
+                    p.invisTimer = 0;
+                    p.setOpacity(1);
+                    strippedAny = true;
+                }
+            });
+            if (strippedAny) showStatus('1 НА 1: НЕВИДИМОСТЬ ОТКЛЮЧЕНА', '#ffaa00', 1500);
+        }
 
         if (ball.lastHitBy && ball.lastHitBy.isAlive && ball.lastHitBy !== this) {
             if (ball.lastHitBy.getCurrentAbility() === 'reaper') {
@@ -1877,12 +2357,41 @@ class Entity {
         }
     }
 
-    rollHumanReactionMs() {
-        if (this.isTestBot) return 90;
-        if (this.tier === 'sweat') return 115 + Math.random() * 65;
-        if (this.tier === 'pro') return 150 + Math.random() * 75;
-        if (this.tier === 'mid') return 215 + Math.random() * 105;
-        return 295 + Math.random() * 150;
+    rollHumanReactionMs(isCloseClash = false) {
+        if (this.isTestBot) return isCloseClash ? 45 : 85;
+        if (isCloseClash) {
+            if (this.tier === 'sweat') return 42 + Math.random() * 35;
+            if (this.tier === 'pro') return 65 + Math.random() * 45;
+            if (this.tier === 'mid') return 115 + Math.random() * 65;
+            return 175 + Math.random() * 90;
+        }
+        if (this.tier === 'sweat') return 85 + Math.random() * 50;
+        if (this.tier === 'pro') return 115 + Math.random() * 60;
+        if (this.tier === 'mid') return 175 + Math.random() * 85;
+        return 250 + Math.random() * 125;
+    }
+
+    rollPrefireLead() {
+        // Frames before impact when bot swings block (enables genuine Pull baiting)
+        if (this.isTestBot) return 9 + Math.random() * 4;
+        if (this.tier === 'sweat') return 7 + Math.random() * 4;
+        if (this.tier === 'pro') return 8 + Math.random() * 5;
+        if (this.tier === 'mid') return 10 + Math.random() * 6;
+        return 12 + Math.random() * 7;
+    }
+
+    pickBestEnemyToAimAt() {
+        const others = players.filter(p => p.isAlive && p !== this && !p.isInvis);
+        if (others.length === 0) return null;
+        let best = others[0], bestScore = -999;
+        others.forEach(e => {
+            const d = this.mesh.position.distanceTo(e.mesh.position);
+            let s = 40 / (d + 12);
+            if (e.blockCooldown > 6) s += 3.5; // Punish players on block CD
+            if (e.stunTimer > 0 || e.scopoTimer > 0 || e.virusTimer > 0) s += 2.2;
+            if (s > bestScore) { bestScore = s; best = e; }
+        });
+        return best;
     }
 
     updateAI() {
@@ -1891,6 +2400,7 @@ class Entity {
         this.updateVerticalPhysics();
         this.updateParryLogic();
 
+        // Test arena bots
         if (this.isTestBot && gameState === 'test') {
             if (testState.botMode === 'dummy') {
                 this.animateWalk(false);
@@ -1917,14 +2427,15 @@ class Entity {
             }
             this.animateWalk(moving);
 
-            if (ball.target === this && ball.teleTimer <= 0) {
+            if (ball.target === this && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
                 if (mainPlayer && mainPlayer.isAlive && this.stunTimer <= 0) {
                     const toPlayer = new THREE.Vector3().subVectors(mainPlayer.mesh.position, this.mesh.position);
                     this.mesh.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
                 }
                 const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
-                const parryRange = 14 + (ball.speed * 2.5);
-                if (distToBall < parryRange && !this.parryDecided) {
+                const parryRange = 15 + (ball.speed * 2.5);
+                const prefireDist = parryRange + (ball.speed * this.prefireLeadFrames);
+                if (distToBall < prefireDist && !this.parryDecided) {
                     this.parryDecided = true;
                     this.tryParry();
                 }
@@ -1939,62 +2450,138 @@ class Entity {
             this.platformMesh.position.set(this.mesh.position.x, this.mesh.position.y - 7, this.mesh.position.z);
         }
 
-        const inLobby = (gameState === 'lobby');
-        if (this.mesh.position.distanceTo(this.targetWalkPos) < 5 || Math.random() < 0.012) {
-            if (inLobby) {
+        // Lobby idle wandering
+        if (gameState === 'lobby') {
+            if (this.mesh.position.distanceTo(this.targetWalkPos) < 5 || Math.random() < 0.012) {
                 this.targetWalkPos.set(-28 + Math.random() * 90, this.baseY, LOBBY_Z - 55 + Math.random() * 110);
-            } else {
-                this.targetWalkPos.set((Math.random() - 0.5) * 180, this.baseY, (Math.random() - 0.5) * 180);
             }
+            const spd = this.getMoveSpeed();
+            let moving = false;
+            if (spd > 0) {
+                const walkDir = new THREE.Vector3().subVectors(this.targetWalkPos, this.mesh.position);
+                if (walkDir.length() > 1.2) {
+                    walkDir.y = 0; walkDir.normalize();
+                    this.mesh.position.add(walkDir.multiplyScalar(spd * 0.72));
+                    this.mesh.rotation.y = Math.atan2(walkDir.x, walkDir.z);
+                    moving = true;
+                }
+                if (Math.random() < 0.004) this.jump();
+            }
+            this.animateWalk(moving);
+            return;
+        }
+
+        if (gameState !== 'playing') return;
+
+        // Combat tactical positioning (real Blade Ball spacing & clash pushing)
+        const aliveOthers = players.filter(p => p.isAlive && p !== this && !p.isInvis);
+        const aliveCount = players.filter(p => p.isAlive).length;
+        const ab = this.ability;
+
+        this.strafeSwapTimer--;
+        if (this.strafeSwapTimer <= 0) {
+            this.strafeDir *= -1;
+            this.strafeSwapTimer = 55 + Math.floor(Math.random() * 85);
         }
 
         const spd = this.getMoveSpeed();
         let moving = false;
-        if (spd > 0) {
-            const walkDir = new THREE.Vector3().subVectors(this.targetWalkPos, this.mesh.position);
-            if (walkDir.length() > 1.2) {
-                walkDir.y = 0; walkDir.normalize();
-                this.mesh.position.add(walkDir.multiplyScalar(spd * 0.78));
-                this.mesh.rotation.y = Math.atan2(walkDir.x, walkDir.z);
+        const focusEnemy = this.pickBestEnemyToAimAt();
+
+        if (spd > 0 && focusEnemy) {
+            const toEnemy = new THREE.Vector3().subVectors(focusEnemy.mesh.position, this.mesh.position);
+            toEnemy.y = 0;
+            const distEnemy = Math.max(0.1, toEnemy.length());
+            const dirToEnemy = toEnemy.clone().divideScalar(distEnemy);
+            const strafeVec = new THREE.Vector3(-dirToEnemy.z * this.strafeDir, 0, dirToEnemy.x * this.strafeDir);
+
+            const moveVec = new THREE.Vector3();
+            const isDuelAggressive = (this.tier === 'sweat' || this.tier === 'pro') && (aliveCount <= 2 || focusEnemy.blockCooldown > 10);
+
+            if (isDuelAggressive) {
+                // Close into clash distance (~20-26 units) and strafe
+                const idealDist = this.tier === 'sweat' ? 20 : 25;
+                if (distEnemy > idealDist + 5) moveVec.addScaledVector(dirToEnemy, 0.85);
+                else if (distEnemy < idealDist - 5) moveVec.addScaledVector(dirToEnemy, -0.5);
+                moveVec.addScaledVector(strafeVec, 0.72);
+            } else if (ball.target === this) {
+                // Backpedal slightly + strafe to buy parry reaction window
+                if (distEnemy < 38) moveVec.addScaledVector(dirToEnemy, -0.65);
+                moveVec.addScaledVector(strafeVec, 0.85);
+            } else {
+                // Maintain smart mid-range spacing around ~44 units
+                if (distEnemy < 32) moveVec.addScaledVector(dirToEnemy, -0.7);
+                else if (distEnemy > 62) moveVec.addScaledVector(dirToEnemy, 0.65);
+                moveVec.addScaledVector(strafeVec, 0.8);
+            }
+
+            // Soft pull away from arena walls
+            if (Math.abs(this.mesh.position.x) > 88) moveVec.x -= Math.sign(this.mesh.position.x) * 0.9;
+            if (Math.abs(this.mesh.position.z) > 88) moveVec.z -= Math.sign(this.mesh.position.z) * 0.9;
+
+            if (moveVec.lengthSq() > 0.01) {
+                moveVec.normalize();
+                this.mesh.position.addScaledVector(moveVec, spd * 0.92);
+                this.clampBounds();
                 moving = true;
             }
-            if (Math.random() < 0.004) this.jump();
+
+            // Face target enemy when about to parry, otherwise face movement
+            if (ball.target === this) {
+                this.mesh.rotation.y = Math.atan2(dirToEnemy.x, dirToEnemy.z);
+            } else if (moving) {
+                this.mesh.rotation.y = Math.atan2(moveVec.x, moveVec.z);
+            }
+
+            if (Math.random() < (this.tier === 'sweat' ? 0.012 : 0.005)) this.jump();
         }
         this.animateWalk(moving);
 
-        if (gameState !== 'playing') return;
-
-        const aliveCount = players.filter(p => p.isAlive).length;
-        const ab = this.ability;
-
-        if (Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
-            if (ab === 'invis' && aliveCount === 2 && !this.isInvis && ball.target !== this && Math.random() < 0.025) {
+        // Proactive ability usage
+        if (Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && this.silencedTimer <= 0) {
+            if (ab === 'invis' && aliveCount > 2 && !this.isInvis && ball.target === this && Math.random() < 0.04) {
                 this.activateAbility();
-            } else if ((ab === 'freeze' || ab === 'telekinesis') && ball.frozenTimer <= 0 && ball.teleTimer <= 0 && ball.speed > 1.5 && Math.random() < 0.006) {
+            } else if ((ab === 'freeze' || ab === 'telekinesis') && ball.frozenTimer <= 0 && ball.teleTimer <= 0 && ball.speed > 1.7 && Math.random() < 0.008) {
                 this.activateAbility();
-            } else if ((ab === 'wind_cloak' || ab === 'shadow_step' || ab === 'scopophobia' || ab === 'swap') && Math.random() < 0.004) {
+            } else if ((ab === 'wind_cloak' || ab === 'shadow_step' || ab === 'qi_charge' || ab === 'chieftains_totem' || ab === 'blade_trap') && Math.random() < 0.006) {
                 this.activateAbility();
-            } else if (ab === 'pull' && ball.target !== this && ball.speed > 1.2 && Math.random() < 0.004) {
+            } else if ((ab === 'scopophobia' || ab === 'swap' || ab === 'hell_hook') && focusEnemy && Math.random() < 0.006) {
                 this.activateAbility();
-            } else if (ab === 'ninja_dash' && ball.target !== this && this.mesh.position.distanceTo(ball.mesh.position) < 60 && Math.random() < 0.007) {
+            } else if (ab === 'pulse' && focusEnemy && this.mesh.position.distanceTo(focusEnemy.mesh.position) < 52 && Math.random() < 0.012) {
+                this.activateAbility();
+            } else if (ab === 'absolute_confidence' && aliveCount > 2 && ball.speed > 1.4 && Math.random() < 0.006) {
+                this.activateAbility();
+            } else if (ab === 'pull' && ball.target && ball.target !== this && ball.target.parryActiveTimer > 0 && Math.random() < 0.35) {
+                // Smart bot Pull-baits when it sees someone pre-fire!
+                this.activateAbility();
+            } else if (ab === 'gales_edge' && ball.target === this && this.mesh.position.distanceTo(ball.mesh.position) < 42 && Math.random() < 0.03) {
+                this.activateAbility();
+            } else if (ab === 'ninja_dash' && ball.target !== this && this.mesh.position.distanceTo(ball.mesh.position) < 58 && Math.random() < 0.01) {
                 this.activateAbility();
             }
         }
 
-        if (ball.target === this && ball.teleTimer <= 0) {
+        // Pre-fire defensive parry & counter-ability logic
+        if (ball.target === this && ball.teleTimer <= 0 && ball.trapTimer <= 0) {
             const elapsedSinceSwitch = performance.now() - ball.targetSetTime;
             if (elapsedSinceSwitch < this.currentReactionMs) return;
 
-            const toBall = new THREE.Vector3().subVectors(ball.mesh.position, this.mesh.position);
-            if (this.stunTimer <= 0) this.mesh.rotation.y = Math.atan2(toBall.x, toBall.z);
+            const distToBall = this.mesh.position.distanceTo(ball.mesh.position);
+            const qiBonus = this.qiTimer > 0 ? 4 : 0;
+            const parryRange = 15 + qiBonus + (ball.speed * 2.5);
+            const prefireDist = parryRange + (ball.speed * this.prefireLeadFrames);
 
-            const distToBall = toBall.length();
-            const parryRange = 15 + (ball.speed * 2.5);
-            const reactionZone = parryRange + (ball.speed * 6.5);
+            // Aim at the best enemy right before swinging so smart targeting sends it there
+            if (focusEnemy && this.stunTimer <= 0) {
+                const aim = new THREE.Vector3().subVectors(focusEnemy.mesh.position, this.mesh.position);
+                this.mesh.rotation.y = Math.atan2(aim.x, aim.z);
+            }
 
-            if ((ab === 'rapture' || ab === 'raging_deflect' || ab === 'aerodynamic_slash') && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
+            // Counter-parry abilities (Rapture, Raging Deflect, Aero Slash, Flash Counter)
+            if ((ab === 'rapture' || ab === 'raging_deflect' || ab === 'aerodynamic_slash' || ab === 'flash_counter') &&
+                Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && this.silencedTimer <= 0) {
                 if (distToBall < 22 + ball.speed * 3.2 && !this.parryDecided) {
-                    const useChance = (aliveCount === 2 || ball.speed > 1.8) ? 0.68 : 0.4;
+                    const useChance = (aliveCount === 2 || ball.speed > 1.9) ? 0.72 : 0.45;
                     if (Math.random() < useChance) {
                         this.parryDecided = true;
                         this.activateAbility();
@@ -2003,32 +2590,32 @@ class Entity {
                 }
             }
 
-            if (ab === 'ninja_dash' && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && distToBall < 32 && Math.random() < 0.14) {
+            if (ab === 'ninja_dash' && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && this.silencedTimer <= 0 && distToBall < 34 && Math.random() < 0.16) {
                 this.parryDecided = true;
                 this.activateAbility();
                 return;
             }
 
-            if (ab !== 'rapture' && ab !== 'raging_deflect' && ab !== 'aerodynamic_slash' && ab !== 'ninja_dash' && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0) {
-                if (distToBall < reactionZone * 1.45 && Math.random() < (ab === 'forcefield' ? 0.09 : 0.035)) {
-                    this.activateAbility();
-                    if (this.isInvis || this.forcefieldTimer > 0) return;
-                }
+            if (ab === 'forcefield' && Date.now() >= this.abilityReadyAt && this.stunTimer <= 0 && this.silencedTimer <= 0 && distToBall < prefireDist * 1.3 && Math.random() < 0.12) {
+                this.activateAbility();
+                if (this.forcefieldTimer > 0) return;
             }
 
-            if (distToBall < reactionZone && !this.parryDecided && this.forcefieldTimer <= 0) {
+            // Pre-fire block decision (swings early while ball is approaching)
+            if (distToBall < prefireDist && !this.parryDecided && this.forcefieldTimer <= 0) {
                 this.parryDecided = true;
-                let baseAcc = this.tier === 'sweat' ? 0.94 : (this.tier === 'pro' ? 0.89 : (this.tier === 'mid' ? 0.79 : 0.65));
-                let speedPenalty = ball.speed * (this.tier === 'sweat' ? 0.036 : (this.tier === 'pro' ? 0.045 : (this.tier === 'mid' ? 0.060 : 0.078)));
-                let successChance = Math.max(0.16, baseAcc - speedPenalty);
+                let baseAcc = this.tier === 'sweat' ? 0.96 : (this.tier === 'pro' ? 0.92 : (this.tier === 'mid' ? 0.83 : 0.68));
+                let speedPenalty = ball.speed * (this.tier === 'sweat' ? 0.025 : (this.tier === 'pro' ? 0.036 : (this.tier === 'mid' ? 0.052 : 0.072)));
+                let successChance = Math.max(0.22, baseAcc - speedPenalty);
                 if (ball.raptureBoost || ball.aeroTimer > 0 || ball.martyrBall) {
-                    successChance *= (this.tier === 'sweat' ? 0.62 : (this.tier === 'pro' ? 0.50 : 0.34));
+                    successChance *= (this.tier === 'sweat' ? 0.72 : (this.tier === 'pro' ? 0.58 : 0.38));
                 }
 
                 if (Math.random() < successChance) {
-                    const jitter = this.tier === 'sweat' ? Math.random() * 35 : (this.tier === 'pro' ? Math.random() * 50 : Math.random() * 95);
-                    setTimeout(() => { if (this.isAlive && ball.target === this) this.tryParry(); }, jitter);
-                } else if (Math.random() > 0.42) {
+                    // Good pre-fire timing: swing immediately so parryActiveTimer covers impact (and is baitable by Pull!)
+                    this.tryParry();
+                } else if (Math.random() < 0.55) {
+                    // Bot panicked and swung way too early, burning its block CD
                     this.tryParry();
                 }
             }
@@ -2183,6 +2770,8 @@ const ball = {
     aeroAngle: 0,
     teleTimer: 0,
     teleOwner: null,
+    trapTimer: 0,
+    trapOwner: null,
     goldenBall: false,
     martyrBall: false,
     selfBounceGrace: 0,
@@ -2195,6 +2784,8 @@ const ball = {
         this.aeroTimer = 0;
         this.teleTimer = 0;
         this.teleOwner = null;
+        this.trapTimer = 0;
+        this.trapOwner = null;
         this.goldenBall = false;
         this.martyrBall = false;
         this.selfBounceGrace = 0;
@@ -2217,7 +2808,7 @@ const ball = {
         }
     },
 
-    startTelekinesis: function(owner) {
+        startTelekinesis: function(owner) {
         this.unfreeze();
         this.aeroTimer = 0;
         this.curveTimer = 0;
@@ -2225,1277 +2816,732 @@ const ball = {
         this.teleOwner = owner;
         teleSphereMesh.visible = true;
         spawnShockwave(this.mesh.position, 0xcc44ff, 2, 16, 0.05, true);
-        spawnSparks(this.mesh.position, 0xcc44ff, 16, 1.0);
+        spawnSparks(this.mesh.position, 0xcc44ff, 16, 1.2);
+        this.updateVisualColor();
+    },
+
+    triggerRaptureLaunch: function(owner) {
+        this.unfreeze();
+        this.aeroTimer = 0;
+        this.curveTimer = 0;
+        this.martyrBall = false;
+        this.raptureBoost = true;
+        this.speed = Math.min(Math.max(this.speed * 1.45, this.speed + 1.3), 9.8);
+        this.pickNewTarget(owner);
+        const dir = new THREE.Vector3();
+        if (this.target) {
+            dir.subVectors(this.target.mesh.position, owner.mesh.position);
+        } else {
+            getEntityAimVector(owner, dir);
+        }
+        spawnRaptureRocks(owner.mesh.position, dir);
+        spawnShockwave(this.mesh.position, 0xff5500, 2, 20, 0.05, true);
+        spawnSparks(this.mesh.position, 0xff6600, 24, 1.4);
+        this.updateVisualColor();
+    },
+
+    triggerRagingDeflect: function(owner) {
+        this.unfreeze();
+        this.aeroTimer = 0;
+        this.curveTimer = 0;
+        this.raptureBoost = false;
+        this.martyrBall = false;
+        this.speed = Math.min(this.speed + 1.15, 9.6);
+        this.pickNewTarget(owner);
+        spawnShockwave(this.mesh.position, 0xff1133, 2, 18, 0.055, true);
+        spawnSparks(this.mesh.position, 0xff2244, 22, 1.35);
+        this.updateVisualColor();
+    },
+
+    triggerAeroSlash: function(owner) {
+        this.unfreeze();
+        this.raptureBoost = false;
+        this.curveTimer = 0;
+        this.martyrBall = false;
+        this.aeroTimer = 55;
+        this.aeroAngle = 0;
+        this.speed = Math.min(this.speed + 0.95, 9.5);
+        this.pickNewTarget(owner);
+        spawnShockwave(this.mesh.position, 0xff2255, 2, 18, 0.05, true);
+        spawnSparks(this.mesh.position, 0xff4488, 20, 1.3);
+        this.updateVisualColor();
+    },
+
+    triggerFlashCounter: function(owner) {
+        this.unfreeze();
+        this.aeroTimer = 0;
+        this.raptureBoost = false;
+        this.martyrBall = false;
+        this.speed = Math.min(this.speed + 1.25, 9.8);
+        const prevHitter = this.lastHitBy;
+        spawnLightning(owner.mesh.position, this.mesh.position.clone(), 0xcc44ff, 4);
+        if (prevHitter && prevHitter.isAlive && prevHitter !== owner && !prevHitter.isInvis) {
+            this.forceTarget(prevHitter, owner);
+        } else {
+            this.pickNewTarget(owner);
+        }
+        spawnShockwave(this.mesh.position, 0xcc44ff, 2, 19, 0.05, true);
+        spawnSparks(this.mesh.position, 0xdd66ff, 22, 1.35);
         this.updateVisualColor();
     },
 
     updateVisualColor: function() {
-        let col = 0x00ddff;
-        let coreCol = 0xffffff;
-        if (this.teleTimer > 0) {
-            col = 0xbb33ff; coreCol = 0xf0ccff;
-        } else if (this.frozenTimer > 0) {
-            col = 0x00eeff; coreCol = 0xd8ffff;
-        } else if (this.martyrBall) {
-            col = this.target === mainPlayer ? 0xff0044 : 0xaa00ff;
-            coreCol = 0x1a0024;
-        } else if (this.goldenBall) {
-            col = this.target === mainPlayer ? 0xff5500 : 0xffd700;
-            coreCol = 0xfff5aa;
-        } else if (this.aeroTimer > 0) {
-            col = 0xff1144; coreCol = 0xffccdd;
-        } else if (this.raptureBoost && this.curveTimer > 0) {
-            col = this.target === mainPlayer ? 0xff1100 : 0xff5500;
-            coreCol = 0xffeeaa;
-        } else if (this.target === mainPlayer) {
-            col = 0xff1122; coreCol = 0xffdddd;
-        }
-        this.currentColorHex = col;
-        ballCoreMat.color.setHex(coreCol);
-        ballShellMat.color.setHex(col);
-        ballGlowSpriteMat.color.setHex(col);
-        ballPointLight.color.setHex(col);
-        ballGroundMat.color.setHex(col);
+        let hex = 0x00eeff;
+        if (this.frozenTimer > 0) hex = 0x66ffff;
+        else if (this.teleTimer > 0) hex = 0xcc44ff;
+        else if (this.raptureBoost) hex = 0xff5500;
+        else if (this.aeroTimer > 0) hex = 0xff2266;
+        else if (this.goldenBall) hex = 0xffd700;
+        else if (this.martyrBall) hex = 0xaa22ff;
+        else if (this.target === mainPlayer) hex = 0xff1122;
+
+        this.currentColorHex = hex;
+        ballShellMat.color.setHex(hex);
+        ballGlowSpriteMat.color.setHex(hex);
+        ballPointLight.color.setHex(hex);
+        ballGroundMat.color.setHex(hex);
     },
 
-    forceTarget: function(newTarget, hitBy) {
-        if (this.target && this.target.isAlive) this.target.setTargetHighlight(false);
-        this.lastHitBy = hitBy;
+    forceTarget: function(newTarget, hitter) {
+        if (this.target) this.target.setTargetHighlight(false);
         this.target = newTarget;
+        this.lastHitBy = hitter || null;
         this.targetSetTime = performance.now();
-        if (this.target) {
-            this.target.setTargetHighlight(true);
-            if (this.target.isBot) {
-                this.target.parryDecided = false;
-                this.target.currentReactionMs = this.target.rollHumanReactionMs();
+
+        if (newTarget) {
+            newTarget.setTargetHighlight(true);
+            newTarget.parryDecided = false;
+            const isCloseClash = !!(hitter && hitter.mesh.position.distanceTo(newTarget.mesh.position) < 34);
+            newTarget.currentReactionMs = newTarget.rollHumanReactionMs(isCloseClash);
+            newTarget.prefireLeadFrames = newTarget.rollPrefireLead();
+
+            if (hitter) {
+                const ab = hitter.getCurrentAbility();
+                if (ab === 'virus') {
+                    newTarget.virusTimer = 180;
+                } else if (ab === 'golden_ball' && Math.random() < 0.25) {
+                    this.goldenBall = true;
+                    this.speed = Math.min(this.speed + 0.4, 9.6);
+                }
             }
         }
         this.updateVisualColor();
     },
 
-    selectSmartTarget: function(hitByEntity, candidates) {
-        if (candidates.length === 1) return [candidates[0]];
-
-        if (!hitByEntity) {
-            return candidates.slice().sort(() => Math.random() - 0.5);
+    pickNewTarget: function(hitter) {
+        let candidates = players.filter(p => p.isAlive && p !== hitter && !p.isInvis);
+        if (candidates.length === 0) {
+            candidates = players.filter(p => p.isAlive && p !== hitter);
         }
-
-        if (hitByEntity === mainPlayer) {
-            camera.getWorldDirection(_aimDir);
-            _aimDir.y = 0;
-            if (_aimDir.lengthSq() < 0.0001) {
-                _aimDir.set(Math.sin(hitByEntity.mesh.rotation.y), 0, Math.cos(hitByEntity.mesh.rotation.y));
+        if (candidates.length === 0) {
+            if (hitter && hitter.isAlive) {
+                this.selfBounceGrace = 24;
+                this.forceTarget(hitter, hitter);
+            } else {
+                this.forceTarget(null, null);
             }
-            _aimDir.normalize();
-        } else {
-            _aimDir.set(Math.sin(hitByEntity.mesh.rotation.y), 0, Math.cos(hitByEntity.mesh.rotation.y)).normalize();
+            return;
         }
 
-        const scored = candidates.map(c => {
-            _toCand.subVectors(c.mesh.position, hitByEntity.mesh.position);
+        // Absolute Confidence приоритетно притягивает мяч
+        const confCandidates = candidates.filter(c => c.absConfTimer > 0);
+        if (confCandidates.length > 0) {
+            this.forceTarget(confCandidates[0], hitter);
+            return;
+        }
+
+        if (!hitter) {
+            const pick = candidates[Math.floor(Math.random() * candidates.length)];
+            this.forceTarget(pick, null);
+            return;
+        }
+
+        getEntityAimVector(hitter, _aimDir);
+        let best = candidates[0];
+        let bestScore = -999;
+
+        candidates.forEach(c => {
+            _toCand.subVectors(c.mesh.position, hitter.mesh.position);
             _toCand.y = 0;
             const dist = Math.max(0.1, _toCand.length());
             const dot = _aimDir.dot(_toCand.divideScalar(dist));
-
-            const aimScore = Math.pow(Math.max(0, (dot + 1) * 0.5), 2.5) * 1.45;
-            const distScore = 30 / (dist + 10);
-            const closeBonus = dist < 26 ? ((26 - dist) / 26) * 1.65 : 0;
-            const score = aimScore + distScore + closeBonus + Math.random() * 0.14;
-            return { entity: c, score };
+            const score = dot * 2.4 + (30 / (dist + 14));
+            if (score > bestScore) {
+                bestScore = score;
+                best = c;
+            }
         });
 
-        scored.sort((a, b) => b.score - a.score);
-        return scored.map(s => s.entity);
+        this.forceTarget(best, hitter);
     },
 
-    pickNewTarget: function(hitByEntity) {
-        this.lastHitBy = hitByEntity;
-        if (this.target && this.target.isAlive) this.target.setTargetHighlight(false);
-
-        const visibleOthers = players.filter(p => p.isAlive && p !== hitByEntity && !p.isInvis);
-
-        if (visibleOthers.length > 0) {
-            const ranked = this.selectSmartTarget(hitByEntity, visibleOthers);
-            let chosen = ranked[0];
-
-            const aliveTotal = players.filter(p => p.isAlive).length;
-            // Luck passive (25% deflect away, disabled in 1v1)
-            if (aliveTotal > 2 && ranked.length > 1 && chosen.getCurrentAbility() === 'luck' && Math.random() < 0.25) {
-                if (chosen === mainPlayer) {
-                    playSynth(600, 1100, 0.2, 'sine', 0.25);
-                    showStatus('УДАЧА ОТВЕЛА МЯЧ', '#00ff66', 1300);
-                    spawnShockwave(chosen.mesh.position, 0x00ff66, 2, 13, 0.06, true);
-                }
-                chosen = ranked[1];
-            }
-
-            // Misfortune passive (30% attract ball to self, disabled in 1v1)
-            if (aliveTotal > 2 && visibleOthers.length > 1) {
-                const misf = visibleOthers.find(p => p !== chosen && p.getCurrentAbility() === 'misfortune');
-                if (misf && Math.random() < 0.30) {
-                    chosen = misf;
-                    spawnShockwave(misf.mesh.position, 0xff2288, 2, 13, 0.06, true);
-                    if (misf === mainPlayer) {
-                        playSynth(440, 220, 0.2, 'triangle', 0.24);
-                        showStatus('MISFORTUNE ПРИТЯНУЛ МЯЧ', '#ff2288', 1300);
-                    }
-                }
-            }
-
-            // Virus passive: infects whoever hit the ball at a Virus user
-            if (hitByEntity && hitByEntity.isAlive && hitByEntity !== chosen && chosen.getCurrentAbility() === 'virus') {
-                hitByEntity.virusTimer = 300;
-                spawnShockwave(hitByEntity.mesh.position, 0x22ff44, 2, 12, 0.06, true);
-                spawnSparks(hitByEntity.mesh.position, 0x22ff44, 10, 0.8);
-                if (hitByEntity === mainPlayer) {
-                    showStatus('ВИРУС: ЗАМЕДЛЕНИЕ 5с', '#22ff44', 1500);
-                } else if (chosen === mainPlayer) {
-                    showStatus(`ВИРУС ЗАРАЗИЛ ${hitByEntity.name}`, '#22ff44', 1300);
-                }
-            }
-
-            this.target = chosen;
-            this.selfBounceGrace = 0;
-        } else if (hitByEntity && hitByEntity.isAlive && !hitByEntity.isInvis) {
-            this.target = hitByEntity;
-            this.selfBounceGrace = 20;
-            this.curveTimer = Math.max(this.curveTimer, 28);
-            const rotY = hitByEntity.mesh.rotation.y;
-            const outDir = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY)).normalize();
-            this.vel.copy(outDir).multiplyScalar(Math.max(this.speed * 1.15, 1.8));
-            this.vel.y = Math.max(this.speed * 0.55, 1.0);
-        } else {
-            this.target = null;
-            this.updateVisualColor();
-            return;
-        }
-
-        this.targetSetTime = performance.now();
-        this.target.setTargetHighlight(true);
-        if (this.target.isBot) {
-            this.target.parryDecided = false;
-            this.target.currentReactionMs = this.target.rollHumanReactionMs();
-        }
-        this.updateVisualColor();
-    },
-
-    triggerRagingDeflect: function(caster) {
-        this.unfreeze();
-        this.aeroTimer = 0;
-        this.martyrBall = false;
-        this.raptureBoost = true;
-        this.curveTimer = 26;
-        this.speed = Math.min(Math.max(this.speed * 1.95, 2.2), 9.2);
-        this.pickNewTarget(caster);
-        spawnShockwave(caster.mesh.position, 0xff1133, 2, 20, 0.05, true);
-        spawnSparks(caster.mesh.position, 0xff2244, 24, 1.4);
-        if (this.target && this.target !== caster) {
-            this.target.stunTimer = 90;
-            spawnLightning(caster.mesh.position, this.target.mesh.position, 0xff2244, 4);
-            if (this.target === mainPlayer) {
-                showStatus('ОГЛУШЕНИЕ 1.5с', '#ff2244', 1400);
-            }
-        }
-        if (this.target) {
-            const dir = new THREE.Vector3().subVectors(this.target.mesh.position, this.mesh.position).normalize();
-            this.vel.copy(dir).multiplyScalar(this.speed);
-        }
-        this.updateVisualColor();
-    },
-
-    triggerAeroSlash: function(caster) {
-        this.unfreeze();
-        this.martyrBall = false;
-        this.raptureBoost = true;
-        this.curveTimer = 0;
-        this.aeroTimer = 46;
-        this.aeroAngle = 0;
-        this.speed = Math.min(Math.max(this.speed * 2.15, 2.5), 9.5);
-        this.pickNewTarget(caster);
-        spawnShockwave(caster.mesh.position, 0xff2255, 2, 22, 0.045, true);
-        spawnShockwave(this.mesh.position, 0xffffff, 1.5, 16, 0.05, true);
-        spawnSparks(this.mesh.position, 0xff2255, 24, 1.4);
-        if (this.target === caster) this.selfBounceGrace = 22;
-        this.updateVisualColor();
-    },
-
-    triggerRaptureLaunch: function(caster) {
-        this.unfreeze();
-        this.aeroTimer = 0;
-        this.martyrBall = false;
-        this.raptureBoost = true;
-        this.curveTimer = 42;
-        this.speed = Math.min(Math.max(this.speed * 2.65, 2.6), 9.6);
-        this.pickNewTarget(caster);
-        this.updateVisualColor();
-        spawnShockwave(caster.mesh.position, 0xff5500, 2, 24, 0.045, true);
-        spawnSparks(caster.mesh.position, 0xff6600, 26, 1.5);
-
-        if (this.target) {
-            if (this.target === caster) {
-                this.selfBounceGrace = 24;
-                this.curveTimer = 44;
-                const rotY = caster.mesh.rotation.y;
-                const outDir = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY)).normalize();
-                spawnRaptureRocks(caster.mesh.position, outDir);
-                this.vel.copy(outDir).multiplyScalar(this.speed * 0.75);
-                this.vel.y = this.speed * 1.25;
-            } else {
-                const toTarget = new THREE.Vector3().subVectors(this.target.mesh.position, this.mesh.position).normalize();
-                spawnRaptureRocks(caster.mesh.position, toTarget);
-                this.vel.copy(toTarget).multiplyScalar(this.speed * 0.65);
-                this.vel.y = this.speed * 1.15;
-            }
-        }
+    spawn: function(centerZ = 0) {
+        this.resetAllSpecials();
+        this.speed = 0.85;
+        this.vel.set(0, 0, 0);
+        this.mesh.position.set(0, 7, centerZ);
+        this.mesh.visible = true;
+        ballGroundRing.visible = true;
+        resetBallTrail();
+        this.pickNewTarget(null);
     },
 
     update: function() {
-        if (!isCombatState()) {
+        if (!isCombatState() || !this.mesh.visible) {
             ballGroundRing.visible = false;
             return;
         }
-        ballGroundRing.visible = true;
-        ballGroundRing.position.x = this.mesh.position.x;
-        ballGroundRing.position.z = this.mesh.position.z;
-        const glowPulse = 16 + Math.sin(performance.now() * 0.02) * 2.5 + this.speed * 1.2;
-        ballGlowSprite.scale.set(glowPulse, glowPulse, 1);
 
         if (this.selfBounceGrace > 0) this.selfBounceGrace--;
 
-        // Telekinesis suspension
-        if (this.teleTimer > 0) {
-            this.teleTimer--;
-            this.mesh.position.y += (15 - this.mesh.position.y) * 0.08;
-            teleSphereMesh.rotation.y += 0.09;
-            teleSphereMesh.rotation.x += 0.06;
-            if (this.teleTimer % 18 === 0) spawnShockwave(this.mesh.position, 0xcc44ff, 2, 12, 0.07, true);
-            if (this.teleTimer <= 0) {
-                teleSphereMesh.visible = false;
-                const owner = (this.teleOwner && this.teleOwner.isAlive) ? this.teleOwner : null;
-                this.teleOwner = null;
-                this.speed = Math.min(Math.max(this.speed * 1.75, 2.5), 9.5);
-                this.raptureBoost = true;
-                this.curveTimer = 18;
-                this.pickNewTarget(owner);
-                if (this.target) {
-                    const launchDir = new THREE.Vector3().subVectors(this.target.mesh.position, this.mesh.position).normalize();
-                    this.vel.copy(launchDir).multiplyScalar(this.speed);
-                }
-                playClashSound(this.speed + 1.5);
-                spawnShockwave(this.mesh.position, 0xcc44ff, 2, 22, 0.05, true);
-                spawnSparks(this.mesh.position, 0xdd66ff, 22, 1.4);
-                if (owner === mainPlayer) addShake(1.1);
-                this.updateVisualColor();
-            }
-            return;
-        }
+        ballGroundRing.visible = true;
+        ballGroundRing.position.set(this.mesh.position.x, 0.2, this.mesh.position.z);
 
+        // Заморозка (Freeze)
         if (this.frozenTimer > 0) {
             this.frozenTimer--;
-            iceShellMesh.rotation.y += 0.05;
-            iceShellMesh.rotation.x += 0.03;
+            iceShellMesh.rotation.y += 0.04;
+            iceShellMesh.rotation.x += 0.025;
             if (this.frozenTimer <= 0) {
                 this.unfreeze();
                 this.updateVisualColor();
             }
+            updateBallScreenIndicator();
             return;
         }
 
-        const centerZ = gameState === 'test' ? TEST_Z : 0;
+        // Телекинез (Telekinesis)
+        if (this.teleTimer > 0) {
+            this.teleTimer--;
+            teleSphereMesh.rotation.y += 0.09;
+            teleSphereMesh.rotation.x += 0.05;
+            this.mesh.position.y += (12 - this.mesh.position.y) * 0.12;
 
-        if (!this.target || !this.target.isAlive || this.target.isInvis) {
-            this.pickNewTarget(null);
-            if (!this.target) {
-                this.mesh.position.lerp(new THREE.Vector3(0, 8, centerZ), 0.04);
-                updateBallTrail(this.mesh.position, this.currentColorHex);
-                return;
-            }
-        }
-
-        const dir = new THREE.Vector3().subVectors(this.target.mesh.position, this.mesh.position);
-        const dist = dir.length();
-
-        if (this.selfBounceGrace <= 0 && dist < 6 + (this.speed * 0.55)) {
-            if (this.target.parryActiveTimer > 0 || this.target.forcefieldTimer > 0) {
-                playClashSound(this.speed);
-                this.target.applyStandardParryBoost();
-                this.target.triggerParryImpactVFX(this.mesh.position.clone(), getSwordAccentColor(this.target.swordId));
-                this.pickNewTarget(this.target);
-                this.target.parryActiveTimer = 0;
-                this.target.blockCooldown = 0;
-            } else {
-                const victim = this.target;
-                const killer = this.lastHitBy;
-                const deathPos = victim.mesh.position.clone();
-                const preSpeed = this.speed;
-
-                victim.die();
-                if (!isCombatState()) return;
-
-                // Martyrdom passive: explode, slow killer, fire dark revenge ball straight back
-                if (victim.getCurrentAbility() === 'martyrdom' && killer && killer.isAlive && killer !== victim) {
-                    killer.martyrSlowTimer = 180;
-                    spawnShockwave(deathPos, 0xaa00ff, 2, 26, 0.04, true);
-                    spawnSparks(deathPos, 0xaa00ff, 24, 1.4);
-                    playSynth(160, 55, 0.4, 'sawtooth', 0.42);
-                    this.resetAllSpecials();
-                    this.martyrBall = true;
-                    this.selfBounceGrace = 12;
-                    this.speed = Math.min(Math.max(preSpeed * 1.15, 1.9), 9.0);
-                    this.mesh.position.set(deathPos.x, 6, deathPos.z);
-                    resetBallTrail();
-                    this.forceTarget(killer, victim);
-                    if (killer === mainPlayer) showStatus('MARTYRDOM: МЕСТЬ УБИТОГО', '#cc44ff', 1600);
-                    else if (victim === mainPlayer) showStatus('MARTYRDOM АКТИВИРОВАН', '#cc44ff', 1500);
-                    return;
-                }
-
-                // Golden Ball passive: no respawn in center, turns gold (+15% speed) and flies straight to next target
-                if (killer && killer.isAlive && killer.getCurrentAbility() === 'golden_ball') {
-                    spawnShockwave(deathPos, 0xffd700, 2, 22, 0.045, true);
-                    spawnSparks(deathPos, 0xffdd33, 24, 1.3);
-                    playSynth(680, 1280, 0.28, 'triangle', 0.32);
-                    this.resetAllSpecials();
-                    this.goldenBall = true;
-                    this.selfBounceGrace = 10;
-                    this.speed = Math.min(Math.max(preSpeed * 1.15, 1.55), 9.4);
-                    this.mesh.position.set(deathPos.x, 6, deathPos.z);
-                    this.pickNewTarget(killer);
-                    if (killer === mainPlayer) showStatus('GOLDEN BALL (+15% СКОР)', '#ffd700', 1400);
-                    return;
-                }
-
-                // Standard reset after kill
-                this.speed = 0.85;
-                this.resetAllSpecials();
-                resetBallTrail();
-                this.mesh.position.set(0, 6, centerZ);
-                this.pickNewTarget(null);
-            }
-        } else {
-            if (this.aeroTimer > 0) {
-                this.aeroTimer--;
-                this.aeroAngle += 0.55;
-                if (this.aeroTimer > 20) {
-                    // Rising tornado vortex phase
-                    const horiz = dir.clone(); horiz.y = 0;
-                    if (horiz.lengthSq() > 0.001) horiz.normalize();
-                    this.mesh.position.x += horiz.x * (this.speed * 0.55) + Math.cos(this.aeroAngle) * 2.4;
-                    this.mesh.position.z += horiz.z * (this.speed * 0.55) + Math.sin(this.aeroAngle) * 2.4;
-                    this.mesh.position.y += 1.45;
-                    if (this.aeroTimer % 5 === 0) {
-                        spawnShockwave(this.mesh.position.clone(), 0xff2255, 1.5, 9, 0.08, true);
-                    }
-                } else {
-                    // High-speed downward dive onto target
-                    dir.normalize();
-                    this.mesh.position.add(dir.multiplyScalar(this.speed * 1.2));
-                    if (this.aeroTimer === 0) this.updateVisualColor();
-                }
-            } else if (this.curveTimer > 0) {
-                this.curveTimer--;
-                const desired = dir.clone().normalize().multiplyScalar(this.speed);
-                this.vel.lerp(desired, 0.09);
-                this.mesh.position.add(this.vel);
-                if (this.mesh.position.y < 2.5) this.mesh.position.y = 2.5;
-                if (this.curveTimer === 0) this.updateVisualColor();
-            } else {
-                dir.normalize();
-                this.mesh.position.add(dir.multiplyScalar(this.speed));
+            if (this.teleTimer <= 0 || !this.teleOwner || !this.teleOwner.isAlive) {
+                teleSphereMesh.visible = false;
+                const owner = this.teleOwner;
+                this.teleOwner = null;
+                this.speed = Math.min(this.speed + 0.85, 9.6);
+                this.pickNewTarget(owner && owner.isAlive ? owner : null);
+                spawnShockwave(this.mesh.position, 0xcc44ff, 2, 18, 0.05, true);
+                spawnSparks(this.mesh.position, 0xcc44ff, 20, 1.3);
+                playSynth(520, 180, 0.24, 'sawtooth', 0.3);
             }
             updateBallTrail(this.mesh.position, this.currentColorHex);
+            updateBallScreenIndicator();
+            return;
+        }
+
+        // Ловушка (Blade Trap)
+        if (this.trapTimer > 0) {
+            this.trapTimer--;
+            this.mesh.position.y = 5.5 + Math.sin(performance.now() * 0.03) * 0.6;
+            if (this.trapTimer <= 0) {
+                const owner = this.trapOwner;
+                this.trapOwner = null;
+                this.speed = Math.min(this.speed + 0.75, 9.5);
+                this.pickNewTarget(owner && owner.isAlive ? owner : null);
+                spawnShockwave(this.mesh.position, 0xff1144, 2, 16, 0.05, true);
+                playSynth(660, 220, 0.2, 'sawtooth', 0.28);
+            }
+            updateBallTrail(this.mesh.position, this.currentColorHex);
+            updateBallScreenIndicator();
+            return;
+        }
+
+        // Проверка актуальности цели
+        const visibleAlive = players.filter(p => p.isAlive && !p.isInvis);
+        if (!this.target || !this.target.isAlive || (this.target.isInvis && visibleAlive.length > 0)) {
+            this.pickNewTarget(this.lastHitBy);
+            if (!this.target) return;
+        }
+
+        const goal = this.target.mesh.position.clone();
+        goal.y += 0.6;
+        const toGoal = new THREE.Vector3().subVectors(goal, this.mesh.position);
+        const dist = toGoal.length();
+        const dirToGoal = dist > 0.001 ? toGoal.clone().divideScalar(dist) : new THREE.Vector3(0, 0, 1);
+
+        if (this.curveTimer > 0) {
+            this.curveTimer--;
+            const desiredVel = dirToGoal.multiplyScalar(this.speed);
+            this.vel.lerp(desiredVel, 0.14);
+            this.mesh.position.add(this.vel);
+        } else if (this.aeroTimer > 0) {
+            this.aeroTimer--;
+            this.aeroAngle += 0.26;
+            const side = new THREE.Vector3(-dirToGoal.z, 0, dirToGoal.x);
+            const curveStrength = Math.min(1, dist / 28) * 1.15;
+            const moveDir = dirToGoal.clone().addScaledVector(side, Math.sin(this.aeroAngle) * curveStrength).normalize();
+            this.vel.copy(moveDir).multiplyScalar(this.speed);
+            this.mesh.position.add(this.vel);
+        } else {
+            const steer = Math.min(0.42, 0.18 + this.speed * 0.03);
+            const desiredVel = dirToGoal.multiplyScalar(this.speed);
+            if (this.vel.lengthSq() < 0.01) this.vel.copy(desiredVel);
+            else this.vel.lerp(desiredVel, steer).setLength(this.speed);
+            this.mesh.position.add(this.vel);
+        }
+
+        if (this.mesh.position.y < 2.6) this.mesh.position.y = 2.6;
+
+        updateBallTrail(this.mesh.position, this.currentColorHex);
+        updateBallScreenIndicator();
+
+        // Попадание по цели
+        const hitDist = this.mesh.position.distanceTo(goal);
+        if (hitDist < 4.5 && this.selfBounceGrace <= 0) {
+            const victim = this.target;
+
+            // Absolute Confidence авто-отбитие при столкновении
+            if (victim.absConfTimer > 0) {
+                victim.absConfTimer = 0;
+                playClashSound(this.speed + 1.0);
+                victim.applyStandardParryBoost();
+                this.speed = Math.min(this.speed + 0.55, 9.6);
+                victim.triggerParryImpactVFX(this.mesh.position.clone(), 0xff1133);
+                this.pickNewTarget(victim);
+                return;
+            }
+
+            victim.setTargetHighlight(false);
+            const wasGolden = this.goldenBall;
+            const hitter = this.lastHitBy;
+
+            if (wasGolden && hitter === mainPlayer && victim.isBot && gameState === 'playing') {
+                const bonus = isX2Active() ? 30 : 15;
+                gameData.coins += bonus;
+                saveGame();
+                showStatus(`GOLDEN BALL: +${bonus} МОНЕТ`, '#ffd700', 1400);
+            }
+
+            // Эффект пассивки Martyr при гибели
+            if (victim.getCurrentAbility() === 'martyr') {
+                players.forEach(p => {
+                    if (p.isAlive && p !== victim && p.mesh.position.distanceTo(victim.mesh.position) < 42) {
+                        p.martyrSlowTimer = 210;
+                    }
+                });
+                spawnShockwave(victim.mesh.position.clone(), 0xaa22ff, 2, 34, 0.04, true);
+            }
+
+            victim.die();
+
+            if (isCombatState()) {
+                this.spawn(gameState === 'test' ? TEST_Z : 0);
+            }
         }
     }
 };
 
 // ==========================================
-// TRAINING MODE
+// TRAINING ZONE (LOBBY)
 // ==========================================
-const trainBallGroup = new THREE.Group();
-const trainBallCoreMat = new THREE.MeshBasicMaterial({ color: 0xffdddd });
-const trainBallGlowMat = new THREE.SpriteMaterial({
-    map: GLOW_TEX, color: 0xff1122, transparent: true, opacity: 0.9,
-    blending: THREE.AdditiveBlending, depthWrite: false
-});
-trainBallGroup.add(new THREE.Mesh(new THREE.SphereGeometry(2.2, 16, 16), trainBallCoreMat));
-const trainGlowSp = new THREE.Sprite(trainBallGlowMat);
-trainGlowSp.scale.set(14, 14, 1);
-trainBallGroup.add(trainGlowSp);
-trainBallGroup.visible = false;
-scene.add(trainBallGroup);
+const trainingBallMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(2.1, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0x00ffaa })
+);
+trainingBallMesh.visible = false;
+scene.add(trainingBallMesh);
 
 const training = {
-    active: false, goingToPlayer: true, speed: 0.9, hits: 0,
-    ballMesh: trainBallGroup,
+    active: false,
+    goingToPlayer: true,
+    speed: 0.75,
+    streak: 0,
+    ballMesh: trainingBallMesh,
 
-    start: function() {
-        this.active = true; this.goingToPlayer = true; this.speed = 0.9; this.hits = 0;
-        this.ballMesh.position.copy(TRAIN_TARGET_POS);
-        trainBallGlowMat.color.setHex(0xff1122);
-        this.ballMesh.visible = true;
-        mainPlayer.setTargetHighlight(true);
-        document.getElementById('btnBlock').style.display = 'flex';
-        document.getElementById('trainingHud').style.display = 'block';
-        this.updateHud();
+    reset: function() {
+        this.active = false;
+        this.goingToPlayer = true;
+        this.speed = 0.75;
+        this.streak = 0;
+        this.ballMesh.visible = false;
     },
-    stop: function() {
-        if (!this.active) return;
-        this.active = false; this.ballMesh.visible = false;
-        hideBlockCdOverlay();
-        if (mainPlayer && mainPlayer.isAlive && gameState === 'lobby') mainPlayer.setTargetHighlight(false);
-        if (gameState === 'lobby') document.getElementById('btnBlock').style.display = 'none';
-        document.getElementById('trainingHud').style.display = 'none';
-    },
+
     onPlayerParry: function() {
-        playClashSound(this.speed);
-        this.hits++; this.speed = Math.min(this.speed + 0.35, 8.5);
         this.goingToPlayer = false;
-        trainBallGlowMat.color.setHex(0x00ff88);
-        mainPlayer.setTargetHighlight(false);
-        spawnShockwave(this.ballMesh.position, 0x00ff88, 1.5, 11, 0.07, false, mainPlayer.mesh.rotation.y);
-        spawnSparks(this.ballMesh.position, 0x00ffaa, 14, 1.0);
-        addShake(0.32);
-        this.updateHud();
+        this.streak++;
+        this.speed = Math.min(4.8, this.speed + 0.16);
+        playClashSound(this.speed);
+        spawnShockwave(this.ballMesh.position.clone(), 0x00ffaa, 1.5, 11, 0.07, true);
+        spawnSparks(this.ballMesh.position.clone(), 0x00ffaa, 12, 0.9);
+        showStatus(`СЕРИЯ ОТБИТИЙ: ${this.streak}`, '#00ffaa', 1100);
     },
-    updateHud: function() {
-        document.getElementById('trainHits').innerText = this.hits;
-        document.getElementById('trainSpd').innerText = this.speed.toFixed(1);
-    },
+
     update: function() {
-        if (gameState !== 'lobby' || !mainPlayer || !mainPlayer.isAlive) { this.stop(); return; }
+        if (gameState !== 'lobby' || !mainPlayer || !mainPlayer.isAlive) {
+            if (this.active) this.reset();
+            return;
+        }
+
         const p = mainPlayer.mesh.position;
-        const inside = (p.x >= TRAIN_X_MIN && p.x <= TRAIN_X_MAX && p.z >= TRAIN_Z_MIN && p.z <= TRAIN_Z_MAX);
-        if (inside && !this.active) this.start();
-        else if (!inside && this.active) { this.stop(); return; }
-        if (!this.active) return;
+        const inZone = p.x >= TRAIN_X_MIN && p.x <= TRAIN_X_MAX && p.z >= TRAIN_Z_MIN && p.z <= TRAIN_Z_MAX;
 
-        const dest = this.goingToPlayer ? mainPlayer.mesh.position : TRAIN_TARGET_POS;
-        const dir = new THREE.Vector3().subVectors(dest, this.ballMesh.position);
-        const dist = dir.length();
+        if (!inZone) {
+            if (this.active) this.reset();
+            return;
+        }
 
-        if (this.goingToPlayer) {
-            if (dist < 5.5 + this.speed * 0.5) {
-                if (mainPlayer.parryActiveTimer > 0) {
-                    this.onPlayerParry();
-                    mainPlayer.parryActiveTimer = 0; mainPlayer.blockCooldown = 0;
-                } else {
-                    spawnKillBeam(mainPlayer.mesh.position.clone(), mainPlayer.explosionColor);
-                    this.stop();
-                    mainPlayer.mesh.position.set(0, mainPlayer.baseY, LOBBY_Z - 4);
-                }
+        if (!this.active) {
+            this.active = true;
+            this.goingToPlayer = true;
+            this.speed = 0.75;
+            this.streak = 0;
+            this.ballMesh.position.copy(TRAIN_TARGET_POS);
+            this.ballMesh.visible = true;
+            showStatus('ЗОНА ТРЕНИРОВКИ', '#00ffaa', 1200);
+        }
+
+        const dest = this.goingToPlayer ? p.clone().add(new THREE.Vector3(0, 0.8, 0)) : TRAIN_TARGET_POS;
+        const toDest = new THREE.Vector3().subVectors(dest, this.ballMesh.position);
+        const dist = toDest.length();
+
+        if (dist <= this.speed + 2.4) {
+            if (this.goingToPlayer) {
+                // Игрок пропустил мяч
+                spawnSparks(this.ballMesh.position.clone(), 0xff3344, 14, 1.0);
+                playSynth(180, 80, 0.2, 'sawtooth', 0.25);
+                showStatus(`ПРОМАХ! СЕРИЯ: ${this.streak}`, '#ff4455', 1200);
+                this.streak = 0;
+                this.speed = 0.75;
+                this.ballMesh.position.copy(TRAIN_TARGET_POS);
             } else {
-                dir.normalize(); this.ballMesh.position.add(dir.multiplyScalar(this.speed));
+                // Отскок от мишени обратно к игроку
+                this.goingToPlayer = true;
+                spawnShockwave(TRAIN_TARGET_POS, 0x00ffaa, 1.5, 10, 0.08, false, 0);
+                playSynth(420, 620, 0.1, 'sine', 0.18);
             }
         } else {
-            if (dist < 5 + this.speed * 0.5) {
-                playClashSound(this.speed * 0.8);
-                spawnSparks(TRAIN_TARGET_POS, 0x00ff88, 10, 0.8);
-                this.goingToPlayer = true;
-                trainBallGlowMat.color.setHex(0xff1122);
-                mainPlayer.setTargetHighlight(true);
-            } else {
-                dir.normalize(); this.ballMesh.position.add(dir.multiplyScalar(this.speed));
-            }
+            this.ballMesh.position.addScaledVector(toDest.normalize(), this.speed);
         }
     }
 };
 
 // ==========================================
-// SECRET TEST ARENA
+// TEST ARENA & MATCH / LOBBY LIFECYCLE
 // ==========================================
+function clearAllEntities() {
+    clearWorldAbilityObjects();
+    players.forEach(p => {
+        scene.remove(p.mesh);
+        scene.remove(p.platformMesh);
+    });
+    players.length = 0;
+    mainPlayer = null;
+}
+
 function clearTestRespawnTimers() {
-    testState.respawnTimers.forEach(t => clearTimeout(t));
+    testState.respawnTimers.forEach(id => clearTimeout(id));
     testState.respawnTimers.length = 0;
 }
 
-function spawnTestBot(slot) {
+function spawnTestBot(slot = 0) {
     const bot = new Entity({
-        name: slot === 0 ? 'TestBot_1' : 'TestBot_2',
-        tier: 'sweat',
-        kills: 9999,
-        wins: 999,
+        name: slot === 0 ? 'Bot_Alpha' : 'Bot_Beta',
+        tier: 'pro',
+        kills: 0,
+        ability: 'dash',
+        sword: 'default',
         isTestBot: true,
         testSlot: slot,
-        sword: slot === 0 ? 'prisma_blade' : 'nebula_staff',
-        ability: 'dash',
-        skin: slot === 0
-            ? { head: 0x151520, torso: 0x6622ff, arms: 0x00eeff, legs: 0x121226, acc: 'visor' }
-            : { head: 0x1a1520, torso: 0xff2255, arms: 0x222233, legs: 0x14101c, acc: 'horns' }
+        skin: { head: 0x00ddff, torso: 0x1a2d55, arms: 0x162444, legs: 0x0e1830, acc: 'visor' }
     }, true);
-    const xPos = slot === 0 ? -24 : 24;
-    bot.mesh.position.set(xPos, bot.baseY, TEST_Z - 26);
-    bot.mesh.rotation.y = 0;
+    bot.mesh.position.set(slot === 0 ? -24 : 24, bot.baseY, TEST_Z - 26);
     bot.targetWalkPos.copy(bot.mesh.position);
-    spawnShockwave(bot.mesh.position, 0x00eeff, 1.5, 11, 0.06, true);
     return bot;
 }
 
-function initTestPanelControls() {
-    const abSel = document.getElementById('testAbSelect');
-    const swSel = document.getElementById('testSwSelect');
-    abSel.innerHTML = '';
-    swSel.innerHTML = '';
-
-    ABILITIES.forEach(ab => {
-        const opt = document.createElement('option');
-        opt.value = ab.id;
-        opt.textContent = ab.name;
-        abSel.appendChild(opt);
-    });
-    SWORDS.forEach(sw => {
-        const opt = document.createElement('option');
-        opt.value = sw.id;
-        opt.textContent = sw.name;
-        swSel.appendChild(opt);
-    });
-
-    abSel.addEventListener('change', (e) => {
-        testState.ability = e.target.value;
-        if (mainPlayer) {
-            mainPlayer.abilityReadyAt = 0;
-            mainPlayer.blinkCharges = 3;
-            mainPlayer.reaperStacks = 0;
-            mainPlayer.isPlatformActive = false;
-            mainPlayer.platformMesh.visible = false;
-            mainPlayer.jumpsLeft = mainPlayer.getMaxJumps();
-        }
-        document.getElementById('platformControls').style.display = (testState.ability === 'platform') ? 'flex' : 'none';
-        updateAbilityHudIcon();
-    });
-
-    swSel.addEventListener('change', (e) => {
-        testState.sword = e.target.value;
-        if (mainPlayer) mainPlayer.equipSword(testState.sword);
-    });
-
-    const btnNoCd = document.getElementById('btnTestNoCd');
-    btnNoCd.addEventListener('click', (e) => {
-        e.stopPropagation();
-        testState.noCd = !testState.noCd;
-        btnNoCd.innerText = testState.noCd ? 'КД: ВЫКЛ' : 'КД: ВКЛ';
-        btnNoCd.classList.toggle('active', testState.noCd);
-        if (testState.noCd && mainPlayer) mainPlayer.abilityReadyAt = 0;
-    });
-
-    const btnBotMode = document.getElementById('btnTestBotMode');
-    btnBotMode.addEventListener('click', (e) => {
-        e.stopPropagation();
-        testState.botMode = testState.botMode === 'parry' ? 'dummy' : 'parry';
-        btnBotMode.innerText = testState.botMode === 'parry' ? 'БОТ: ОТБИВ' : 'БОТ: МАНЕКЕН';
-        btnBotMode.classList.toggle('active', testState.botMode === 'dummy');
-    });
-
-    document.getElementById('btnTestSpeed').addEventListener('click', (e) => {
-        e.stopPropagation();
-        ball.speed = Math.min(ball.speed + 1.5, 9.2);
-        showStatus(`СКОРОСТЬ МЯЧА: ${ball.speed.toFixed(1)}`, '#00eeff', 1000);
-    });
-
-    document.getElementById('btnTestExit').addEventListener('click', (e) => {
-        e.stopPropagation();
-        returnToLobby();
-    });
-}
-initTestPanelControls();
-
 function enterTestArena() {
-    training.stop();
     clearInterval(lobbyTimerHandle);
+    lobbyTimerHandle = null;
     clearTestRespawnTimers();
-    stopAllTouchControls();
-    hideStatus();
-    hideBlockCdOverlay();
+    training.reset();
+    clearAllEntities();
 
     gameState = 'test';
+    testState.kills = 0;
     testState.ability = gameData.equippedAbility;
     testState.sword = gameData.equippedSword;
-    testState.kills = 0;
-    camShake = 0;
-
-    document.getElementById('testAbSelect').value = testState.ability;
-    document.getElementById('testSwSelect').value = testState.sword;
-    document.getElementById('btnTestNoCd').innerText = testState.noCd ? 'КД: ВЫКЛ' : 'КД: ВКЛ';
-    document.getElementById('btnTestNoCd').classList.toggle('active', testState.noCd);
-    document.getElementById('btnTestBotMode').innerText = testState.botMode === 'parry' ? 'БОТ: ОТБИВ' : 'БОТ: МАНЕКЕН';
-    document.getElementById('btnTestBotMode').classList.toggle('active', testState.botMode === 'dummy');
-
-    document.getElementById('leftHud').style.display = 'none';
-    document.getElementById('topBar').style.display = 'none';
-    document.getElementById('btnOpenMenu').style.display = 'none';
-    document.getElementById('btnInteractWheel').style.display = 'none';
-    document.getElementById('abilityMenu').style.display = 'none';
-    document.getElementById('wheelModal').style.display = 'none';
-    document.getElementById('playtimeModal').style.display = 'none';
-    document.getElementById('settingsModal').style.display = 'none';
-    document.getElementById('testPanel').style.display = 'flex';
-    document.getElementById('killFeed').style.top = '54px';
-
-    document.getElementById('btnBlock').style.display = 'flex';
-    document.getElementById('btnAbility').style.display = 'flex';
-    document.getElementById('platformControls').style.display = (testState.ability === 'platform') ? 'flex' : 'none';
-
-    players.forEach(p => { scene.remove(p.mesh); scene.remove(p.platformMesh); });
-    players.length = 0;
 
     mainPlayer = new Entity({
-        name: 'Player', tier: 'pro', kills: gameData.kills, wins: gameData.wins,
-        skin: { head: 0xffe0bd, torso: 0x0088ff, arms: 0x00aaff, legs: 0x113366, acc: 'none' }
+        name: 'Player',
+        skin: { head: 0x00ccff, torso: 0x0077ff, arms: 0x0066dd, legs: 0x004499, acc: 'none' }
     }, false);
-    mainPlayer.mesh.position.set(0, mainPlayer.baseY, TEST_Z + 28);
-    mainPlayer.mesh.rotation.y = Math.PI;
+    mainPlayer.mesh.position.set(0, mainPlayer.baseY, TEST_Z + 44);
+    mainPlayer.equipSword(testState.sword);
     snapCamera(0, 1.08);
 
     spawnTestBot(0);
     spawnTestBot(1);
+    ball.spawn(TEST_Z);
+
+    const testHud = document.getElementById('testArenaHud');
+    if (testHud) testHud.style.display = 'flex';
+    const lobbyHud = document.getElementById('lobbyHud');
+    if (lobbyHud) lobbyHud.style.display = 'none';
+    const matchHud = document.getElementById('matchHud');
+    if (matchHud) matchHud.style.display = 'none';
 
     updateAbilityHudIcon();
-    playSynth(440, 1200, 0.35, 'triangle', 0.32);
-    spawnShockwave(mainPlayer.mesh.position, 0xaa44ff, 2, 18, 0.05, true);
-    showToast('Тестовая арена открыта');
-
-    ball.speed = 0.9;
-    ball.resetAllSpecials();
-    resetBallTrail();
-    ball.mesh.position.set(0, 6, TEST_Z);
-    ball.mesh.visible = true;
-    ball.pickNewTarget(null);
+    showToast('СЕКРЕТНАЯ ТЕСТ-АРЕНА');
 }
 
-// ==========================================
-// MATCH LIFECYCLE
-// ==========================================
-function spawnEntitiesInLobby() {
-    players.forEach(p => { scene.remove(p.mesh); scene.remove(p.platformMesh); });
-    players.length = 0;
+function exitTestArena() {
+    clearTestRespawnTimers();
+    const testHud = document.getElementById('testArenaHud');
+    if (testHud) testHud.style.display = 'none';
+    returnToLobby();
+}
 
+function spawnLobbyEntities() {
+    clearAllEntities();
     mainPlayer = new Entity({
-        name: 'Player', tier: 'pro', kills: gameData.kills, wins: gameData.wins,
-        skin: { head: 0xffe0bd, torso: 0x0088ff, arms: 0x00aaff, legs: 0x113366, acc: 'none' }
+        name: 'Player',
+        skin: { head: 0x00ccff, torso: 0x0077ff, arms: 0x0066dd, legs: 0x004499, acc: 'none' }
     }, false);
     mainPlayer.mesh.position.set(0, mainPlayer.baseY, LOBBY_Z - 4);
+    mainPlayer.equipSword(gameData.equippedSword);
+    snapCamera(Math.PI, 1.08);
 
-    const picked = serverRoster.slice().sort(() => Math.random() - 0.5).slice(0, 6);
-    picked.forEach(profile => {
-        const bot = new Entity(profile, true);
-        bot.mesh.position.set(-22 + Math.random() * 75, bot.baseY, LOBBY_Z - 40 + Math.random() * 80);
-    });
+    if (Array.isArray(serverRoster)) {
+        serverRoster.forEach(botProfile => {
+            const b = new Entity(botProfile, true);
+            b.mesh.position.set(-24 + Math.random() * 80, b.baseY, LOBBY_Z - 48 + Math.random() * 96);
+            b.targetWalkPos.copy(b.mesh.position);
+        });
+    }
+    updateAbilityHudIcon();
+    updateLeaderboards3D();
 }
 
-function startLobbyTimer() {
+function startLobbyCountdown() {
     clearInterval(lobbyTimerHandle);
     lobbyTime = 15;
-    document.getElementById('lobbyTimer').innerText = lobbyTime;
-    document.getElementById('gameStateText').style.display = 'block';
-    document.getElementById('aliveCountText').style.display = 'none';
+    const timerEl = document.getElementById('lobbyTimer');
+    if (timerEl) timerEl.innerText = lobbyTime;
+
     lobbyTimerHandle = setInterval(() => {
+        if (gameState !== 'lobby') {
+            clearInterval(lobbyTimerHandle);
+            lobbyTimerHandle = null;
+            return;
+        }
         lobbyTime--;
-        document.getElementById('lobbyTimer').innerText = lobbyTime;
-        if (lobbyTime <= 0) { clearInterval(lobbyTimerHandle); startGame(); }
+        if (timerEl) timerEl.innerText = Math.max(0, lobbyTime);
+        if (lobbyTime <= 0) {
+            clearInterval(lobbyTimerHandle);
+            lobbyTimerHandle = null;
+            startMatch();
+        }
     }, 1000);
 }
 
-function startGame() {
-    training.stop();
-    stopAllTouchControls();
-    hideStatus();
-    hideBlockCdOverlay();
+function startMatch() {
+    training.reset();
+    clearWorldAbilityObjects();
     gameState = 'playing';
     matchKills = 0;
-    camShake = 0;
-    eventCornerJumps = 0;
 
-    document.getElementById('gameStateText').style.display = 'none';
-    document.getElementById('btnOpenMenu').style.display = 'none';
-    document.getElementById('btnInteractWheel').style.display = 'none';
-    document.getElementById('abilityMenu').style.display = 'none';
-    document.getElementById('wheelModal').style.display = 'none';
-    document.getElementById('playtimeModal').style.display = 'none';
-    document.getElementById('settingsModal').style.display = 'none';
+    const total = players.length;
+    players.forEach((p, idx) => {
+        const angle = (idx / Math.max(1, total)) * Math.PI * 2;
+        const radius = 64;
+        p.isAlive = true;
+        p.velY = 0;
+        p.jumpsLeft = p.getMaxJumps();
+        p.blockCooldown = 0;
+        p.parryActiveTimer = 0;
+        p.abilityReadyAt = 0;
+        p.reaperStacks = 0;
+        p.blinkCharges = 3;
+        p.galeCharges = 2;
+        p.stripActiveBuffs();
+        p.stunTimer = 0;
+        p.virusTimer = 0;
+        p.scopoTimer = 0;
+        p.silencedTimer = 0;
+        p.martyrSlowTimer = 0;
+        p.setTargetHighlight(false);
+        p.mesh.position.set(Math.cos(angle) * radius, p.baseY, Math.sin(angle) * radius);
+        p.mesh.rotation.y = Math.atan2(-Math.cos(angle), -Math.sin(angle));
+    });
 
-    document.getElementById('aliveCountText').style.display = 'block';
-    document.getElementById('aliveCount').innerText = players.length;
-    document.getElementById('btnBlock').style.display = 'flex';
-    document.getElementById('btnAbility').style.display = 'flex';
-    if (gameData.equippedAbility === 'platform') {
-        document.getElementById('platformControls').style.display = 'flex';
+    if (mainPlayer) {
+        mainPlayer.ability = gameData.equippedAbility;
+        mainPlayer.equipSword(gameData.equippedSword);
+        snapCamera(mainPlayer.mesh.rotation.y + Math.PI, 1.08);
     }
 
-    players.forEach((p, idx) => {
-        const angle = (idx / players.length) * Math.PI * 2;
-        p.mesh.position.set(Math.cos(angle) * 60, p.baseY, Math.sin(angle) * 60);
-        p.mesh.rotation.y = Math.atan2(-Math.cos(angle), -Math.sin(angle));
-        p.setTargetHighlight(false); p.setOpacity(1);
-        p.isInvis = false; p.invisTimer = 0; p.shadowTimer = 0;
-        p.windTimer = 0; p.forcefieldTimer = 0; p.stunTimer = 0;
-        p.virusTimer = 0; p.scopoTimer = 0; p.scopoWeakHit = false; p.martyrSlowTimer = 0;
-        p.blinkCharges = 3; p.reaperStacks = 0; p.velY = 0;
-        p.abilityReadyAt = 0; p.blockCooldown = 0; p.parryActiveTimer = 0;
-        p.shieldGroup.visible = false; p.windAuraGroup.visible = false;
-        p.stunRing.visible = false; p.virusAura.visible = false; p.scopoAura.visible = false;
-    });
-    if (mainPlayer) snapCamera(mainPlayer.mesh.rotation.y + Math.PI, 1.08);
-    updateAbilityHudIcon();
+    const aliveEl = document.getElementById('aliveCount');
+    if (aliveEl) aliveEl.innerText = players.length;
+    const lobbyHud = document.getElementById('lobbyHud');
+    if (lobbyHud) lobbyHud.style.display = 'none';
+    const matchHud = document.getElementById('matchHud');
+    if (matchHud) matchHud.style.display = 'flex';
+    const overEl = document.getElementById('gameOver');
+    if (overEl) overEl.style.display = 'none';
 
-    ball.speed = 0.85;
-    ball.resetAllSpecials();
-    resetBallTrail();
-    ball.mesh.position.set(0, 6, 0);
-    ball.mesh.visible = true;
-    ball.pickNewTarget(null);
+    updateAbilityHudIcon();
+    ball.spawn(0);
+    showStatus('РАУНД НАЧАЛСЯ!', '#00eeff', 1500);
 }
 
 function returnToLobby() {
     clearTestRespawnTimers();
     stopAllTouchControls();
-    gameState = 'lobby';
-    platformMoveDir = 0;
-    camShake = 0;
-    eventCornerJumps = 0;
     hideStatus();
     hideBlockCdOverlay();
-    dangerVignetteEl.classList.remove('active');
-    ballArrowEl.style.display = 'none';
-    ball.mesh.visible = false; ball.target = null; ball.resetAllSpecials();
+    ball.mesh.visible = false;
+    ball.target = null;
     ballGroundRing.visible = false;
     resetBallTrail();
+    dangerVignetteEl.classList.remove('active');
+    ballArrowEl.style.display = 'none';
 
-    document.getElementById('testPanel').style.display = 'none';
-    document.getElementById('leftHud').style.display = 'flex';
-    document.getElementById('topBar').style.display = 'block';
-    document.getElementById('killFeed').style.top = '28px';
+    gameState = 'lobby';
+    const overEl = document.getElementById('gameOver');
+    if (overEl) overEl.style.display = 'none';
+    const matchHud = document.getElementById('matchHud');
+    if (matchHud) matchHud.style.display = 'none';
+    const testHud = document.getElementById('testArenaHud');
+    if (testHud) testHud.style.display = 'none';
+    const lobbyHud = document.getElementById('lobbyHud');
+    if (lobbyHud) lobbyHud.style.display = 'flex';
 
-    document.getElementById('gameOver').style.display = 'none';
-    document.getElementById('btnBlock').style.display = 'none';
-    document.getElementById('btnAbility').style.display = 'none';
-    document.getElementById('platformControls').style.display = 'none';
-    document.getElementById('effectBarContainer').style.display = 'none';
-    document.getElementById('btnOpenMenu').style.display = 'block';
-
-    rotateServerPlayers();
-    spawnEntitiesInLobby();
-    snapCamera(Math.PI, 1.08);
-    updateLeaderboards3D();
-    updateAbilityHudIcon();
-    startLobbyTimer();
-}
-document.getElementById('btnBackLobby').addEventListener('click', returnToLobby);
-
-// Controls
-let platformMoveDir = 0;
-document.getElementById('btnUp').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); platformMoveDir = 1; });
-document.getElementById('btnUp').addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); platformMoveDir = 0; });
-document.getElementById('btnDown').addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); platformMoveDir = -1; });
-document.getElementById('btnDown').addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); platformMoveDir = 0; });
-
-document.getElementById('btnAbility').addEventListener('touchstart', (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (mainPlayer) mainPlayer.activateAbility();
-});
-document.getElementById('btnJump').addEventListener('touchstart', (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (mainPlayer) mainPlayer.jump();
-});
-document.getElementById('btnBlock').addEventListener('touchstart', (e) => {
-    e.preventDefault(); e.stopPropagation();
-    if (mainPlayer) mainPlayer.tryParry();
-});
-
-// Shop
-const menuModal = document.getElementById('abilityMenu');
-document.getElementById('btnOpenMenu').addEventListener('click', (e) => {
-    e.stopPropagation(); stopAllTouchControls(); renderShop(); menuModal.style.display = 'flex';
-});
-document.getElementById('btnCloseMenu').addEventListener('click', (e) => {
-    e.stopPropagation(); menuModal.style.display = 'none';
-});
-document.getElementById('tabAbilities').addEventListener('click', () => {
-    document.getElementById('tabAbilities').classList.add('active');
-    document.getElementById('tabSwords').classList.remove('active');
-    document.getElementById('abilityGrid').style.display = 'grid';
-    document.getElementById('swordGrid').style.display = 'none';
-});
-document.getElementById('tabSwords').addEventListener('click', () => {
-    document.getElementById('tabSwords').classList.add('active');
-    document.getElementById('tabAbilities').classList.remove('active');
-    document.getElementById('swordGrid').style.display = 'grid';
-    document.getElementById('abilityGrid').style.display = 'none';
-});
-
-function renderShop() {
-    const abGrid = document.getElementById('abilityGrid');
-    abGrid.innerHTML = '';
-    ABILITIES.forEach(ab => {
-        const owned = gameData.unlockedAbilities.includes(ab.id);
-        const selected = gameData.equippedAbility === ab.id;
-        const card = document.createElement('div');
-        card.className = 'item-card' + (selected ? ' selected' : '') + (ab.wheelOnly ? ' wheel-only' : '');
-        const priceText = selected ? 'ЭКИПИРОВАНО' : (owned ? 'ВЫБРАТЬ' : (ab.wheelOnly ? 'РУЛЕТКА (2%)' : `${ab.price} монет`));
-        const priceClass = owned ? 'owned' : (ab.wheelOnly ? 'locked-wheel' : '');
-        card.innerHTML = `
-            <img src="${ab.img}" onerror="this.style.display='none'">
-            <div class="item-name">${ab.name}</div>
-            <div class="item-sub">${ab.desc}</div>
-            <div class="item-price ${priceClass}">${priceText}</div>
-        `;
-        card.onclick = () => {
-            if (owned) {
-                gameData.equippedAbility = ab.id;
-                saveGame(); renderShop();
-            } else if (ab.wheelOnly) {
-                showToast('Rapture выпадает только в колесе фортуны (2%)');
-            } else if (gameData.coins >= ab.price) {
-                gameData.coins -= ab.price;
-                gameData.unlockedAbilities.push(ab.id);
-                gameData.equippedAbility = ab.id;
-                saveGame(); renderShop();
-                showToast(`Куплена способность: ${ab.name}`);
-            } else {
-                showToast(`Недостаточно монет (нужно ${ab.price})`);
-            }
-        };
-        abGrid.appendChild(card);
-    });
-
-    const swGrid = document.getElementById('swordGrid');
-    swGrid.innerHTML = '';
-    SWORDS.forEach(sw => {
-        const owned = gameData.unlockedSwords.includes(sw.id);
-        const selected = gameData.equippedSword === sw.id;
-        const card = document.createElement('div');
-        card.className = 'item-card' + (selected ? ' selected' : '') + (sw.wheelOnly ? ' wheel-only' : '');
-        const iconHtml = sw.img
-            ? `<img src="${sw.img}" onerror="this.style.display='none'">`
-            : `<div style="height:42px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;letter-spacing:1px;color:${sw.id === 'prisma_blade' ? '#00eeff' : '#aabbcc'};">${sw.id === 'prisma_blade' ? 'NEON' : 'BLADE'}</div>`;
-        const priceText = selected ? 'ЭКИПИРОВАНО' : (owned ? 'ВЫБРАТЬ' : (sw.wheelOnly ? 'РУЛЕТКА' : `${sw.price} монет`));
-        const priceClass = owned ? 'owned' : (sw.wheelOnly ? 'locked-wheel' : '');
-        card.innerHTML = `
-            ${iconHtml}
-            <div class="item-name">${sw.name}</div>
-            <div class="item-sub">${sw.desc}</div>
-            <div class="item-price ${priceClass}">${priceText}</div>
-        `;
-        card.onclick = () => {
-            if (owned) {
-                gameData.equippedSword = sw.id;
-                if (mainPlayer) mainPlayer.equipSword(sw.id);
-                saveGame(); renderShop();
-            } else if (sw.wheelOnly) {
-                showToast(`${sw.name} выпадает только в колесе фортуны`);
-            } else if (gameData.coins >= sw.price) {
-                gameData.coins -= sw.price;
-                gameData.unlockedSwords.push(sw.id);
-                gameData.equippedSword = sw.id;
-                if (mainPlayer) mainPlayer.equipSword(sw.id);
-                saveGame(); renderShop();
-                showToast(`Куплен меч: ${sw.name}`);
-            } else {
-                showToast(`Недостаточно монет (нужно ${sw.price})`);
-            }
-        };
-        swGrid.appendChild(card);
-    });
+    spawnLobbyEntities();
+    startLobbyCountdown();
 }
 
-// Graphics & auto-optimization
-function applyGraphicsSettings() {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, gfxSettings.pixelRatio));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    if (composer) composer.setSize(window.innerWidth, window.innerHeight);
-    starField.visible = gfxSettings.stars;
-    document.getElementById('fpsBadge').style.display = gfxSettings.showFps ? 'block' : 'none';
+// ==========================================
+// MAIN PLAYER INPUT, CAMERA & GAME LOOP
+// ==========================================
+const keysDown = {};
+window.addEventListener('keydown', (e) => { keysDown[e.code] = true; });
+window.addEventListener('keyup', (e) => { keysDown[e.code] = false; });
 
-    document.getElementById('optBloom').checked = gfxSettings.bloom;
-    document.getElementById('optParticles').checked = gfxSettings.particles;
-    document.getElementById('optStars').checked = gfxSettings.stars;
-    document.getElementById('optFpsShow').checked = gfxSettings.showFps;
-    document.getElementById('optRes').value = String(gfxSettings.pixelRatio);
+const _camForward = new THREE.Vector3();
+const _camRight = new THREE.Vector3();
+const _camLookTarget = new THREE.Vector3();
 
-    ['presetUltra', 'presetMed', 'presetFps'].forEach(id => document.getElementById(id).classList.remove('active'));
-    if (gfxSettings.preset === 'ultra') document.getElementById('presetUltra').classList.add('active');
-    else if (gfxSettings.preset === 'med') document.getElementById('presetMed').classList.add('active');
-    else if (gfxSettings.preset === 'fps') document.getElementById('presetFps').classList.add('active');
-    saveGfx();
-}
+function updateMainPlayer() {
+    if (!mainPlayer || !mainPlayer.isAlive) return;
 
-function setGfxPreset(name) {
-    gfxSettings.preset = name;
-    if (name === 'ultra') {
-        gfxSettings.bloom = true; gfxSettings.particles = true; gfxSettings.stars = true; gfxSettings.pixelRatio = 1.5;
-    } else if (name === 'med') {
-        gfxSettings.bloom = true; gfxSettings.particles = true; gfxSettings.stars = true; gfxSettings.pixelRatio = 1;
-    } else {
-        gfxSettings.bloom = false; gfxSettings.particles = true; gfxSettings.stars = false; gfxSettings.pixelRatio = 0.75;
-    }
-    applyGraphicsSettings();
-}
+    mainPlayer.updateBuffTimers();
+    mainPlayer.updateVerticalPhysics();
+    mainPlayer.updateParryLogic();
 
-document.getElementById('btnOpenSettings').addEventListener('click', (e) => {
-    e.stopPropagation(); stopAllTouchControls(); applyGraphicsSettings(); document.getElementById('settingsModal').style.display = 'flex';
-});
-document.getElementById('btnCloseSettings').addEventListener('click', (e) => {
-    e.stopPropagation(); document.getElementById('settingsModal').style.display = 'none';
-});
-document.getElementById('presetUltra').addEventListener('click', () => setGfxPreset('ultra'));
-document.getElementById('presetMed').addEventListener('click', () => setGfxPreset('med'));
-document.getElementById('presetFps').addEventListener('click', () => setGfxPreset('fps'));
-
-document.getElementById('optBloom').addEventListener('change', (e) => { gfxSettings.bloom = e.target.checked; gfxSettings.preset = 'custom'; applyGraphicsSettings(); });
-document.getElementById('optParticles').addEventListener('change', (e) => { gfxSettings.particles = e.target.checked; gfxSettings.preset = 'custom'; applyGraphicsSettings(); });
-document.getElementById('optStars').addEventListener('change', (e) => { gfxSettings.stars = e.target.checked; gfxSettings.preset = 'custom'; applyGraphicsSettings(); });
-document.getElementById('optFpsShow').addEventListener('change', (e) => { gfxSettings.showFps = e.target.checked; applyGraphicsSettings(); });
-document.getElementById('optRes').addEventListener('change', (e) => { gfxSettings.pixelRatio = parseFloat(e.target.value); gfxSettings.preset = 'custom'; applyGraphicsSettings(); });
-
-let currentFps = 60;
-let autoOptRunning = false;
-document.getElementById('btnAutoOpt').addEventListener('click', () => {
-    if (autoOptRunning) return;
-    autoOptRunning = true;
-    const status = document.getElementById('autoOptStatus');
-    status.innerText = 'Проверка производительности...';
-    gfxSettings.bloom = true;
-    applyGraphicsSettings();
-
-    let frames = 0;
-    const startT = performance.now();
-    function bench() {
-        frames++;
-        const dt = performance.now() - startT;
-        if (dt < 900) {
-            requestAnimationFrame(bench);
-        } else {
-            const fps = Math.round((frames * 1000) / dt);
-            const cores = navigator.hardwareConcurrency || 4;
-            const mem = navigator.deviceMemory || 4;
-            if (fps >= 52 && cores >= 6 && mem >= 4) {
-                setGfxPreset('ultra');
-                status.innerText = `Установлен пресет УЛЬТРА (${fps} FPS)`;
-            } else if (fps >= 34) {
-                setGfxPreset('med');
-                status.innerText = `Установлен пресет НОРМ (${fps} FPS)`;
-            } else {
-                setGfxPreset('fps');
-                status.innerText = `Установлен пресет ФПС+ (${fps} FPS, Bloom отключён)`;
-            }
-            autoOptRunning = false;
-        }
-    }
-    requestAnimationFrame(bench);
-});
-
-// Wheel of fortune & playtime rewards
-const wheelCanvas = document.getElementById('wheelCanvas');
-const wCtx = wheelCanvas.getContext('2d');
-let wheelAngle = 0, wheelSpinning = false;
-
-function drawWheel(angle) {
-    const cx = 120, cy = 120, r = 114, n = WHEEL_ITEMS.length, slice = (Math.PI * 2) / n;
-    wCtx.clearRect(0, 0, 240, 240);
-    for (let i = 0; i < n; i++) {
-        const start = angle + i * slice - Math.PI / 2, end = start + slice;
-        wCtx.beginPath(); wCtx.moveTo(cx, cy);
-        wCtx.arc(cx, cy, r, start, end); wCtx.closePath();
-        wCtx.fillStyle = WHEEL_ITEMS[i].color; wCtx.fill();
-        wCtx.strokeStyle = '#fff'; wCtx.lineWidth = 2; wCtx.stroke();
-        wCtx.save(); wCtx.translate(cx, cy); wCtx.rotate(start + slice / 2);
-        wCtx.fillStyle = '#fff'; wCtx.font = 'bold 12px sans-serif'; wCtx.textAlign = 'right';
-        wCtx.fillText(WHEEL_ITEMS[i].short, r - 10, 4); wCtx.restore();
-    }
-    wCtx.beginPath(); wCtx.arc(cx, cy, 18, 0, Math.PI * 2);
-    wCtx.fillStyle = '#ff2244'; wCtx.fill();
-    wCtx.strokeStyle = '#fff'; wCtx.lineWidth = 3; wCtx.stroke();
-}
-drawWheel(0);
-
-function rollWheelIndex() {
-    const total = WHEEL_ITEMS.reduce((s, it) => s + it.weight, 0);
-    let r = Math.random() * total;
-    for (let i = 0; i < WHEEL_ITEMS.length; i++) { r -= WHEEL_ITEMS[i].weight; if (r <= 0) return i; }
-    return 0;
-}
-
-function spinWheel(useCoins) {
-    if (wheelSpinning) return;
-    if (useCoins) {
-        if (gameData.dailyCoinSpinsUsed >= 3) { showToast('Лимит 3 прокрута за монеты в день исчерпан'); return; }
-        if (gameData.coins < 3000) { showToast('Недостаточно монет (нужно 3,000)'); return; }
-        gameData.coins -= 3000; gameData.dailyCoinSpinsUsed++;
-    } else {
-        if (gameData.spins <= 0) { showToast('Нет бесплатных спинов'); return; }
-        gameData.spins--;
-    }
-    saveGame();
-
-    wheelSpinning = true;
-    document.getElementById('wheelResult').style.display = 'none';
-    const winIdx = rollWheelIndex();
-    const slice = (Math.PI * 2) / WHEEL_ITEMS.length;
-    const targetOffset = (Math.PI * 2) - (winIdx * slice + slice / 2);
-    const extraSpins = (isInstantSpinActive() ? 2 : 6) * Math.PI * 2;
-    const startAngle = wheelAngle % (Math.PI * 2);
-    const finalAngle = extraSpins + targetOffset;
-    const duration = isInstantSpinActive() ? 700 : 3200;
-    const startTime = performance.now();
-
-    function animWheel(now) {
-        const t = Math.min(1, (now - startTime) / duration);
-        wheelAngle = startAngle + (finalAngle - startAngle) * (1 - Math.pow(1 - t, 3));
-        drawWheel(wheelAngle);
-        if (t < 1) requestAnimationFrame(animWheel);
-        else { wheelSpinning = false; grantWheelPrize(WHEEL_ITEMS[winIdx]); }
-    }
-    playSynth(500, 900, 0.2, 'triangle', 0.28);
-    requestAnimationFrame(animWheel);
-}
-
-function grantWheelPrize(item) {
-    let msg = `Выпало: ${item.label}`;
-    if (item.type === 'coins') gameData.coins += item.val;
-    else if (item.type === 'instant') {
-        gameData.spins += 1; gameData.instantSpinUntil = Date.now() + 30 * 60 * 1000;
-        msg = 'Быстрый прокрут на 30 мин и +1 спин';
-    } else if (item.type === 'x2') {
-        gameData.x2CoinsUntil = Date.now() + 15 * 60 * 1000;
-        msg = 'Буст x2 монет на 15 минут';
-    } else if (item.type === 'ability') {
-        if (gameData.unlockedAbilities.includes(item.val)) { gameData.coins += 40; msg = `${item.label} уже открыта (+40 монет)`; }
-        else { gameData.unlockedAbilities.push(item.val); msg = `Открыта способность: ${item.label}`; }
-    } else if (item.type === 'sword') {
-        if (gameData.unlockedSwords.includes(item.val)) { gameData.coins += 40; msg = `${item.label} уже открыт (+40 монет)`; }
-        else { gameData.unlockedSwords.push(item.val); msg = `Открыт меч: ${item.label}`; }
-    }
-    saveGame();
-    playSynth(600, 1200, 0.35, 'triangle', 0.35);
-    const resBox = document.getElementById('wheelResult');
-    resBox.innerHTML = (item.img ? `<img src="${item.img}" onerror="this.style.display='none'">` : '') + msg;
-    resBox.style.display = 'block';
-}
-
-document.getElementById('btnInteractWheel').addEventListener('click', (e) => { e.stopPropagation(); stopAllTouchControls(); saveGame(); document.getElementById('wheelModal').style.display = 'flex'; });
-document.getElementById('btnCloseWheel').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('wheelModal').style.display = 'none'; });
-document.getElementById('btnSpinFree').addEventListener('click', () => spinWheel(false));
-document.getElementById('btnSpinCoins').addEventListener('click', () => spinWheel(true));
-
-const SPIN_INTERVAL_SEC = 600;
-function fmtTime(sec) {
-    return `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
-}
-
-function updatePlaytimeUI() {
-    const leftSec = Math.max(0, SPIN_INTERVAL_SEC - gameData.playtimeSeconds);
-    const leftStr = fmtTime(leftSec);
-    const pending = gameData.pendingPlaytimeSpins || 0;
-
-    document.getElementById('sessionTimerTxt').innerText = pending > 0 ? `+${pending} спин` : leftStr;
-    document.getElementById('ptModalTime').innerText = leftStr;
-    document.getElementById('ptProgressFill').style.width = `${Math.min(100, (gameData.playtimeSeconds / SPIN_INTERVAL_SEC) * 100)}%`;
-    document.getElementById('ptPendingCount').innerText = pending;
-
-    const claimBtn = document.getElementById('btnClaimPlaytime');
-    claimBtn.disabled = pending <= 0;
-    claimBtn.innerText = pending > 0 ? `ЗАБРАТЬ (+${pending})` : 'ЗАБРАТЬ';
-    document.getElementById('btnPlaytime').classList.toggle('ready', pending > 0);
-
-    const buffs = document.getElementById('buffsRow');
-    buffs.innerHTML = '';
-    if (isX2Active()) buffs.innerHTML += `<div class="buff-badge">x2 монеты: ${fmtTime(Math.ceil((gameData.x2CoinsUntil - Date.now()) / 1000))}</div>`;
-    if (isInstantSpinActive()) buffs.innerHTML += `<div class="buff-badge">Быстрый прокрут: ${fmtTime(Math.ceil((gameData.instantSpinUntil - Date.now()) / 1000))}</div>`;
-}
-
-let ptSaveTick = 0;
-setInterval(() => {
-    gameData.playtimeSeconds = (gameData.playtimeSeconds || 0) + 1;
-    let earnedNow = 0;
-    while (gameData.playtimeSeconds >= SPIN_INTERVAL_SEC) {
-        gameData.playtimeSeconds -= SPIN_INTERVAL_SEC;
-        gameData.pendingPlaytimeSpins = (gameData.pendingPlaytimeSpins || 0) + 1;
-        earnedNow++;
-    }
-    ptSaveTick++;
-    if (earnedNow > 0) {
-        saveGame();
-        showToast(`Начислен спин за время в игре (+${earnedNow})`);
-    } else if (ptSaveTick >= 5) {
-        ptSaveTick = 0;
-        localStorage.setItem('bladeBallV1', JSON.stringify(gameData));
-    }
-    updatePlaytimeUI();
-}, 1000);
-
-document.getElementById('btnPlaytime').addEventListener('click', (e) => { e.stopPropagation(); stopAllTouchControls(); updatePlaytimeUI(); document.getElementById('playtimeModal').style.display = 'flex'; });
-document.getElementById('btnClosePlaytime').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('playtimeModal').style.display = 'none'; });
-document.getElementById('btnClaimPlaytime').addEventListener('click', () => {
-    const n = gameData.pendingPlaytimeSpins || 0;
-    if (n <= 0) return;
-    gameData.spins += n; gameData.pendingPlaytimeSpins = 0;
-    saveGame(); updatePlaytimeUI();
-    showToast(`Получено спинов: +${n}`);
-});
-
-// Save Export / Import
-const btnExportSave = document.getElementById('btnExportSave');
-if (btnExportSave) {
-    btnExportSave.addEventListener('click', () => {
-        const raw = localStorage.getItem('bladeBallV1') || JSON.stringify(gameData);
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(raw)
-                .then(() => showToast('Сохранение скопировано'))
-                .catch(() => prompt('Скопируй код сохранения:', raw));
-        } else {
-            prompt('Скопируй код сохранения:', raw);
-        }
-    });
-}
-const btnImportSave = document.getElementById('btnImportSave');
-if (btnImportSave) {
-    btnImportSave.addEventListener('click', () => {
-        const raw = prompt('Вставь код сохранения:');
-        if (!raw) return;
-        try {
-            const parsed = JSON.parse(raw.trim());
-            if (typeof parsed.coins === 'number') {
-                localStorage.setItem('bladeBallV1', JSON.stringify(parsed));
-                location.reload();
-            } else {
-                showToast('Неверный формат сохранения');
-            }
-        } catch (e) {
-            showToast('Ошибка чтения сохранения');
-        }
-    });
-}
-
-// Boot & main loop
-spawnEntitiesInLobby();
-applyGraphicsSettings();
-saveGame();
-updatePlaytimeUI();
-startLobbyTimer();
-
-const effectBarContainer = document.getElementById('effectBarContainer');
-const effectBar = document.getElementById('effectBar');
-let fpsFrames = 0, lastFpsTime = performance.now();
-
-function updatePlayerEffectBar() {
-    let ratio = 0, color = '#00ffff';
-    if (mainPlayer.isInvis) { ratio = mainPlayer.invisTimer / 180; color = '#00ffff'; }
-    else if (mainPlayer.forcefieldTimer > 0) { ratio = mainPlayer.forcefieldTimer / mainPlayer.forcefieldMax; color = '#ff5522'; }
-    else if (mainPlayer.windTimer > 0) { ratio = mainPlayer.windTimer / 600; color = '#00ff88'; }
-    else if (mainPlayer.shadowTimer > 0) { ratio = mainPlayer.shadowTimer / 210; color = '#aa66ff'; }
-    else if (mainPlayer.scopoTimer > 0) { ratio = mainPlayer.scopoTimer / 240; color = '#ff1144'; }
-    else if (mainPlayer.virusTimer > 0) { ratio = mainPlayer.virusTimer / 300; color = '#22ff44'; }
-    else if (mainPlayer.martyrSlowTimer > 0) { ratio = mainPlayer.martyrSlowTimer / 180; color = '#aa44ff'; }
-
-    if (ratio > 0) {
-        effectBarContainer.style.display = 'block';
-        effectBarContainer.style.borderColor = color;
-        effectBar.style.background = color;
-        effectBar.style.width = `${Math.max(0, Math.min(100, ratio * 100))}%`;
-    } else {
-        effectBarContainer.style.display = 'none';
-    }
-}
-
-function animate() {
-    requestAnimationFrame(animate);
-
-    fpsFrames++;
-    const now = performance.now();
-    if (now - lastFpsTime >= 500) {
-        currentFps = Math.round((fpsFrames * 1000) / (now - lastFpsTime));
-        fpsFrames = 0; lastFpsTime = now;
-        if (gfxSettings.showFps) document.getElementById('fpsBadge').innerText = `${currentFps} FPS`;
+    if (mainPlayer.isPlatformActive && isCombatState()) {
+        mainPlayer.mesh.position.y = Math.min(28, mainPlayer.mesh.position.y + 0.8);
+        mainPlayer.platformMesh.position.set(mainPlayer.mesh.position.x, mainPlayer.mesh.position.y - 7, mainPlayer.mesh.position.z);
     }
 
-    if (starField.visible) starField.rotation.y += 0.00025;
+    camera.getWorldDirection(_camForward);
+    _camForward.y = 0;
+    if (_camForward.lengthSq() < 0.0001) _camForward.set(0, 0, -1);
+    _camForward.normalize();
+    _camRight.set(-_camForward.z, 0, _camForward.x);
 
-    camThetaSmooth += (camTheta - camThetaSmooth) * 0.35;
-    camPhiSmooth += (camPhi - camPhiSmooth) * 0.35;
+    let inputX = joyX;
+    let inputY = joyY;
+    if (keysDown['KeyW'] || keysDown['ArrowUp']) inputY -= 1;
+    if (keysDown['KeyS'] || keysDown['ArrowDown']) inputY += 1;
+    if (keysDown['KeyA'] || keysDown['ArrowLeft']) inputX -= 1;
+    if (keysDown['KeyD'] || keysDown['ArrowRight']) inputX += 1;
 
-    if (joyActive && (Math.abs(joyX) > 0.08 || Math.abs(joyY) > 0.08)) {
-        const sinT = Math.sin(camThetaSmooth);
-        const cosT = Math.cos(camThetaSmooth);
-        moveX = cosT * joyX + (-sinT) * (-joyY);
-        moveZ = (-sinT) * joyX + (-cosT) * (-joyY);
-        isMoving = true;
+    const len = Math.hypot(inputX, inputY);
+    const spd = mainPlayer.getMoveSpeed();
+    let movingNow = false;
+
+    if (len > 0.08 && spd > 0) {
+        if (len > 1) { inputX /= len; inputY /= len; }
+        moveX = (_camForward.x * (-inputY)) + (_camRight.x * inputX);
+        moveZ = (_camForward.z * (-inputY)) + (_camRight.z * inputX);
+        mainPlayer.mesh.position.x += moveX * spd;
+        mainPlayer.mesh.position.z += moveZ * spd;
+        mainPlayer.clampBounds();
+        movingNow = true;
     } else {
         moveX = 0;
         moveZ = 0;
-        isMoving = false;
     }
 
-    if (mainPlayer && mainPlayer.isAlive) {
-        mainPlayer.updateBuffTimers();
-        mainPlayer.updateVerticalPhysics();
+    if (shiftLockActive) {
+        mainPlayer.mesh.rotation.y = Math.atan2(_camForward.x, _camForward.z);
+    } else if (movingNow) {
+        mainPlayer.mesh.rotation.y = Math.atan2(moveX, moveZ);
+    }
 
-        const spd = mainPlayer.getMoveSpeed();
-        if ((moveX !== 0 || moveZ !== 0) && spd > 0 && gameState !== 'gameover') {
-            mainPlayer.mesh.position.x += moveX * spd;
-            mainPlayer.mesh.position.z += moveZ * spd;
-            mainPlayer.mesh.rotation.y = Math.atan2(moveX, moveZ);
-            mainPlayer.clampBounds();
-        }
+    mainPlayer.animateWalk(movingNow);
 
-        if (mainPlayer.isPlatformActive && isCombatState()) {
-            mainPlayer.mesh.position.y = Math.max(mainPlayer.baseY, Math.min(48, mainPlayer.mesh.position.y + platformMoveDir * 0.8));
-            mainPlayer.platformMesh.position.set(mainPlayer.mesh.position.x, mainPlayer.mesh.position.y - 7, mainPlayer.mesh.position.z);
-        }
-
-        mainPlayer.animateWalk(isMoving && gameState !== 'gameover');
-        mainPlayer.updateParryLogic();
-        updatePlayerEffectBar();
-
-        const cdLeftMs = mainPlayer.abilityReadyAt - Date.now();
-        const cdEl = document.getElementById('abCdOverlay');
-        if (cdLeftMs > 0 && isCombatState() && !(gameState === 'test' && testState.noCd)) {
-            cdEl.style.display = 'flex';
-            cdEl.innerText = Math.ceil(cdLeftMs / 1000);
+    // Обновление HUD-оверлеев КД блока и абилки
+    const blockOverlay = document.getElementById('blockCdOverlay');
+    if (blockOverlay) {
+        if (mainPlayer.blockCooldown > 0 && mainPlayer.parryActiveTimer === 0) {
+            blockOverlay.style.display = 'flex';
+            blockOverlay.innerText = (mainPlayer.blockCooldown / 60).toFixed(1);
         } else {
-            cdEl.style.display = 'none';
+            blockOverlay.style.display = 'none';
         }
-
-        const blkCdEl = document.getElementById('blockCdOverlay');
-        if (blkCdEl) {
-            if (mainPlayer.blockCooldown > 0 && mainPlayer.parryActiveTimer === 0 && (isCombatState() || training.active)) {
-                blkCdEl.style.display = 'flex';
-                blkCdEl.innerText = (mainPlayer.blockCooldown / 60).toFixed(1);
-            } else {
-                blkCdEl.style.display = 'none';
-            }
-        }
-
-        if (gameState === 'lobby') {
-            const distWheel = Math.hypot(mainPlayer.mesh.position.x - WHEEL_PAD_POS.x, mainPlayer.mesh.position.z - WHEEL_PAD_POS.z);
-            document.getElementById('btnInteractWheel').style.display = (distWheel < 15) ? 'block' : 'none';
-        }
-
-        let desiredFov = 62;
-        if (mainPlayer.shadowTimer > 0) desiredFov = 72;
-        else if (mainPlayer.windTimer > 0) desiredFov = 67;
-        else if (isCombatState()) desiredFov = 62 + Math.min(8, Math.max(0, (ball.speed - 1.5) * 1.1));
-        targetFov += (desiredFov - targetFov) * 0.08;
-        if (Math.abs(camera.fov - targetFov) > 0.05) {
-            camera.fov = targetFov;
-            camera.updateProjectionMatrix();
-        }
-
-        const sx = camShake > 0.02 ? (Math.random() - 0.5) * camShake : 0;
-        const sy = camShake > 0.02 ? (Math.random() - 0.5) * camShake : 0;
-        camShake *= 0.84;
-
-        camera.position.x = mainPlayer.mesh.position.x + camRadius * Math.sin(camPhiSmooth) * Math.sin(camThetaSmooth) + sx;
-        camera.position.z = mainPlayer.mesh.position.z + camRadius * Math.sin(camPhiSmooth) * Math.cos(camThetaSmooth);
-        camera.position.y = mainPlayer.mesh.position.y + camRadius * Math.cos(camPhiSmooth) + sy;
-        camera.lookAt(mainPlayer.mesh.position);
     }
 
-    players.forEach(p => { if (p !== mainPlayer) p.updateAI(); });
-    ball.update();
-    training.update();
-    updateVFX();
-    updateBallScreenIndicator();
+    const abOverlay = document.getElementById('abCdOverlay');
+    if (abOverlay) {
+        const remMs = mainPlayer.abilityReadyAt - Date.now();
+        if (remMs > 0 && isCombatState()) {
+            abOverlay.style.display = 'flex';
+            abOverlay.innerText = Math.ceil(remMs / 1000);
+        } else {
+            abOverlay.style.display = 'none';
+        }
+    }
 
-    if (gfxSettings.bloom && composer) composer.render();
-    else renderer.render(scene, camera);
+    // Подсказка колеса фортуны в лобби
+    const wheelBtn = document.getElementById('btnWheelPrompt');
+    if (wheelBtn) {
+        const onWheelPad = gameState === 'lobby' && mainPlayer.mesh.position.distanceTo(WHEEL_PAD_POS) < 16;
+        wheelBtn.style.display = onWheelPad ? 'block' : 'none';
+    }
+}
+
+function updateCamera() {
+    if (!mainPlayer) return;
+    camThetaSmooth += (camTheta - camThetaSmooth) * 0.22;
+    camPhiSmooth += (camPhi - camPhiSmooth) * 0.22;
+
+    targetFov += (62 - targetFov) * 0.08;
+    if (Math.abs(camera.fov - targetFov) > 0.05) {
+        camera.fov += (targetFov - camera.fov) * 0.18;
+        camera.updateProjectionMatrix();
+    }
+
+    const p = mainPlayer.mesh.position;
+    let offsetX = Math.sin(camThetaSmooth) * Math.sin(camPhiSmooth) * camRadius;
+    let offsetY = Math.cos(camPhiSmooth) * camRadius + 6;
+    let offsetZ = Math.cos(camThetaSmooth) * Math.sin(camPhiSmooth) * camRadius;
+
+    _camLookTarget.set(p.x, p.y + 3.2, p.z);
+
+    if (shiftLockActive) {
+        const sideX = Math.cos(camThetaSmooth) * 4.2;
+        const sideZ = -Math.sin(camThetaSmooth) * 4.2;
+        offsetX += sideX;
+        offsetZ += sideZ;
+        _camLookTarget.x += sideX;
+        _camLookTarget.z += sideZ;
+    }
+
+    let shakeX = 0, shakeY = 0;
+    if (camShake > 0.02) {
+        shakeX = (Math.random() - 0.5) * camShake;
+        shakeY = (Math.random() - 0.5) * camShake;
+        camShake *= 0.84;
+    } else {
+        camShake = 0;
+    }
+
+    camera.position.set(p.x + offsetX + shakeX, Math.max(2.5, p.y + offsetY + shakeY), p.z + offsetZ);
+    camera.lookAt(_camLookTarget);
 }
 
 window.addEventListener('resize', () => {
@@ -3505,4 +3551,29 @@ window.addEventListener('resize', () => {
     if (composer) composer.setSize(window.innerWidth, window.innerHeight);
 });
 
+function animate() {
+    requestAnimationFrame(animate);
+
+    updateMainPlayer();
+    for (let i = 0; i < players.length; i++) {
+        if (players[i].isBot) players[i].updateAI();
+    }
+    updateWorldAbilityObjects();
+    ball.update();
+    training.update();
+    updateVFX();
+    updateCamera();
+
+    if (composer && gfxSettings.bloom !== false) {
+        composer.render();
+    } else {
+        renderer.render(scene, camera);
+    }
+}
+
+// Старт игры
+saveGame();
+spawnLobbyEntities();
+startLobbyCountdown();
 animate();
+
